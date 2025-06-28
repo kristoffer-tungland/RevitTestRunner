@@ -1,0 +1,62 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RevitAddin", "RevitAddin\RevitAddin.csproj", "{F55D5D43-238D-49E2-8692-1B5A71B41008}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RevitTestAdapter", "RevitTestAdapter\RevitTestAdapter.csproj", "{D7B82838-C4B1-4785-BEBD-66A34D948069}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyRevitTests", "MyRevitTests\MyRevitTests.csproj", "{800528CB-D90A-4750-846A-77ED0BF57F0D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F55D5D43-238D-49E2-8692-1B5A71B41008}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F55D5D43-238D-49E2-8692-1B5A71B41008}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F55D5D43-238D-49E2-8692-1B5A71B41008}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F55D5D43-238D-49E2-8692-1B5A71B41008}.Debug|x64.Build.0 = Debug|Any CPU
+		{F55D5D43-238D-49E2-8692-1B5A71B41008}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F55D5D43-238D-49E2-8692-1B5A71B41008}.Debug|x86.Build.0 = Debug|Any CPU
+		{F55D5D43-238D-49E2-8692-1B5A71B41008}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F55D5D43-238D-49E2-8692-1B5A71B41008}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F55D5D43-238D-49E2-8692-1B5A71B41008}.Release|x64.ActiveCfg = Release|Any CPU
+		{F55D5D43-238D-49E2-8692-1B5A71B41008}.Release|x64.Build.0 = Release|Any CPU
+		{F55D5D43-238D-49E2-8692-1B5A71B41008}.Release|x86.ActiveCfg = Release|Any CPU
+		{F55D5D43-238D-49E2-8692-1B5A71B41008}.Release|x86.Build.0 = Release|Any CPU
+		{D7B82838-C4B1-4785-BEBD-66A34D948069}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7B82838-C4B1-4785-BEBD-66A34D948069}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7B82838-C4B1-4785-BEBD-66A34D948069}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D7B82838-C4B1-4785-BEBD-66A34D948069}.Debug|x64.Build.0 = Debug|Any CPU
+		{D7B82838-C4B1-4785-BEBD-66A34D948069}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D7B82838-C4B1-4785-BEBD-66A34D948069}.Debug|x86.Build.0 = Debug|Any CPU
+		{D7B82838-C4B1-4785-BEBD-66A34D948069}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7B82838-C4B1-4785-BEBD-66A34D948069}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D7B82838-C4B1-4785-BEBD-66A34D948069}.Release|x64.ActiveCfg = Release|Any CPU
+		{D7B82838-C4B1-4785-BEBD-66A34D948069}.Release|x64.Build.0 = Release|Any CPU
+		{D7B82838-C4B1-4785-BEBD-66A34D948069}.Release|x86.ActiveCfg = Release|Any CPU
+		{D7B82838-C4B1-4785-BEBD-66A34D948069}.Release|x86.Build.0 = Release|Any CPU
+		{800528CB-D90A-4750-846A-77ED0BF57F0D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{800528CB-D90A-4750-846A-77ED0BF57F0D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{800528CB-D90A-4750-846A-77ED0BF57F0D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{800528CB-D90A-4750-846A-77ED0BF57F0D}.Debug|x64.Build.0 = Debug|Any CPU
+		{800528CB-D90A-4750-846A-77ED0BF57F0D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{800528CB-D90A-4750-846A-77ED0BF57F0D}.Debug|x86.Build.0 = Debug|Any CPU
+		{800528CB-D90A-4750-846A-77ED0BF57F0D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{800528CB-D90A-4750-846A-77ED0BF57F0D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{800528CB-D90A-4750-846A-77ED0BF57F0D}.Release|x64.ActiveCfg = Release|Any CPU
+		{800528CB-D90A-4750-846A-77ED0BF57F0D}.Release|x64.Build.0 = Release|Any CPU
+		{800528CB-D90A-4750-846A-77ED0BF57F0D}.Release|x86.ActiveCfg = Release|Any CPU
+		{800528CB-D90A-4750-846A-77ED0BF57F0D}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
