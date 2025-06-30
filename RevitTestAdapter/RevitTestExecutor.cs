@@ -2,12 +2,14 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Adapter;
 using System.IO.Pipes;
 using System.Text.Json;
+using System.Diagnostics;
 
 namespace RevitTestAdapter
 {
     [ExtensionUri("executor://RevitTestExecutor")]
-    public class RevitTestExecutor : ITestExecutor
-    {
+public class RevitTestExecutor : ITestExecutor
+{
+        private const string PipeNamePrefix = "RevitTestPipe_";
         public void RunTests(IEnumerable<TestCase> tests, IRunContext runContext, IFrameworkHandle frameworkHandle)
         {
             var assembly = tests.First().Source;
@@ -25,8 +27,7 @@ namespace RevitTestAdapter
 
         private static string SendRunCommand(string assembly, string[] methods)
         {
-            using var client = new NamedPipeClientStream(".", "RevitTestPipe", PipeDirection.InOut);
-            client.Connect();
+            using var client = ConnectToRevit();
             var command = new
             {
                 Command = "RunTests",
@@ -40,6 +41,25 @@ namespace RevitTestAdapter
             using var sr = new StreamReader(client);
             var result = sr.ReadLine() ?? string.Empty;
             return result;
+        }
+
+        private static NamedPipeClientStream ConnectToRevit()
+        {
+            foreach (var proc in Process.GetProcessesByName("Revit"))
+            {
+                var pipeName = PipeNamePrefix + proc.Id;
+                var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
+                try
+                {
+                    client.Connect(100);
+                    return client;
+                }
+                catch
+                {
+                    client.Dispose();
+                }
+            }
+            throw new InvalidOperationException("No Revit process with test pipe found.");
         }
 
         private static void ParseResults(string resultXmlPath, IFrameworkHandle frameworkHandle, string source)

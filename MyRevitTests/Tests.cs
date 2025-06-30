@@ -9,7 +9,7 @@ namespace MyRevitTests
     {
         [Test]
         [RevitTestModel("proj-guid", "model-guid")]
-        public void TestWalls([System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(System.Diagnostics.DynamicallyAccessedMemberTypes.All)] Document doc)
+        public void TestWalls([System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All)] Document doc)
         {
             Assert.IsNotNull(doc);
         }

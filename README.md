@@ -4,8 +4,8 @@ This repository contains a minimal proof of concept for running NUnit based Revi
 
 ## Projects
 
-- **RevitAddin** – Add-in loaded into Revit. Implements a simple NUnit runner and named pipe client.
-- **RevitTestAdapter** – Custom test adapter for Visual Studio. Discovers tests and sends execution commands to Revit via named pipe.
+- **RevitAddin** – Add-in loaded into Revit. Implements a simple NUnit runner and a named pipe server.
+- **RevitTestAdapter** – Custom test adapter for Visual Studio. Discovers tests and sends execution commands to the Revit process via a named pipe whose name includes the Revit process id.
 - **MyRevitTests** – Example test library that uses the `RevitTestModel` attribute.
 
 ## Building
