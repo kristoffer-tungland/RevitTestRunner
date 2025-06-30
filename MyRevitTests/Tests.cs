@@ -9,9 +9,16 @@ namespace MyRevitTests
     {
         [Test]
         [RevitTestModel("proj-guid", "model-guid")]
-        public void TestWalls([System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All)] Document doc)
+        public void TestWalls()
         {
-            Assert.IsNotNull(doc);
+            Assert.IsNotNull(RevitNUnitExecutor.CurrentDocument);
+        }
+
+        [Test]
+        [RevitTestModel(@"C:\\Models\\sample.rvt")]
+        public void TestLocalFile()
+        {
+            Assert.IsNotNull(RevitNUnitExecutor.CurrentDocument);
         }
     }
 }
