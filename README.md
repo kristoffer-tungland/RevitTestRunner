@@ -19,10 +19,18 @@ dotnet build RevitTestRunner.sln
 ## Sample Test
 
 ```csharp
+[assembly: RevitAddin.RevitTransaction]
 [Test]
 [RevitTestModel("proj-guid", "model-guid")]
-public void TestWalls(Document doc)
+public void TestWalls()
 {
-    Assert.IsNotNull(doc);
+    Assert.IsNotNull(RevitAddin.RevitNUnitExecutor.CurrentDocument);
 }
+```
+
+The `RevitTestModel` attribute accepts either a pair of BIM 360 GUIDs or a local
+file path:
+
+```csharp
+[RevitTestModel(@"C:\\Models\\sample.rvt")]
 ```

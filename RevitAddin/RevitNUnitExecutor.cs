@@ -1,5 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.Loader;
+using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using NUnit.Engine;
 
@@ -7,8 +10,58 @@ namespace RevitAddin
 {
     public static class RevitNUnitExecutor
     {
+        public static UIApplication? UiApplication { get; private set; }
+        public static Document? CurrentDocument { get; private set; }
+        private static readonly Dictionary<string, Document> _openDocs = new();
+        private const string LocalPrefix = "local:";
+
+        public static Document EnsureModelOpen(string projectGuid, string modelGuid)
+        {
+            if (UiApplication == null)
+                throw new InvalidOperationException("UI application not initialized");
+
+            var key = $"{projectGuid}:{modelGuid}";
+            if (_openDocs.TryGetValue(key, out var doc) && doc.IsValidObject)
+            {
+                CurrentDocument = doc;
+                return doc;
+            }
+
+            var projGuid = new Guid(projectGuid);
+            var modGuid = new Guid(modelGuid);
+            var cloudPath = ModelPathUtils.ConvertCloudGUIDsToCloudPath(ModelPathUtils.CloudRegionUS, projGuid, modGuid);
+            var app = UiApplication.Application;
+            var openOpts = new OpenOptions();
+            doc = app.OpenDocumentFile(cloudPath, openOpts);
+            _openDocs[key] = doc;
+            CurrentDocument = doc;
+            return doc;
+        }
+
+        public static Document EnsureModelOpen(string localPath)
+        {
+            if (UiApplication == null)
+                throw new InvalidOperationException("UI application not initialized");
+
+            var key = LocalPrefix + localPath;
+            if (_openDocs.TryGetValue(key, out var doc) && doc.IsValidObject)
+            {
+                CurrentDocument = doc;
+                return doc;
+            }
+
+            var modelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(localPath);
+            var app = UiApplication.Application;
+            var opts = new OpenOptions();
+            doc = app.OpenDocumentFile(modelPath, opts);
+            _openDocs[key] = doc;
+            CurrentDocument = doc;
+            return doc;
+        }
+
         public static string ExecuteTestsInRevit(PipeCommand command, UIApplication uiApp)
         {
+            UiApplication = uiApp;
             var testAssemblyPath = command.TestAssembly;
             var methods = command.TestMethods;
             // isolate test assemblies without unloading them
