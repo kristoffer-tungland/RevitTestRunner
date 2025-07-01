@@ -6,6 +6,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using NUnit.Engine;
 
+using RevitTestFramework;
 namespace RevitAddin
 {
     public static class RevitNUnitExecutor
@@ -24,6 +25,7 @@ namespace RevitAddin
             if (_openDocs.TryGetValue(key, out var doc) && doc.IsValidObject)
             {
                 CurrentDocument = doc;
+                RevitModelService.CurrentDocument = doc;
                 return doc;
             }
 
@@ -35,6 +37,7 @@ namespace RevitAddin
             doc = app.OpenDocumentFile(cloudPath, openOpts);
             _openDocs[key] = doc;
             CurrentDocument = doc;
+                RevitModelService.CurrentDocument = doc;
             return doc;
         }
 
@@ -47,6 +50,7 @@ namespace RevitAddin
             if (_openDocs.TryGetValue(key, out var doc) && doc.IsValidObject)
             {
                 CurrentDocument = doc;
+                RevitModelService.CurrentDocument = doc;
                 return doc;
             }
 
@@ -56,12 +60,15 @@ namespace RevitAddin
             doc = app.OpenDocumentFile(modelPath, opts);
             _openDocs[key] = doc;
             CurrentDocument = doc;
+                RevitModelService.CurrentDocument = doc;
             return doc;
         }
 
         public static string ExecuteTestsInRevit(PipeCommand command, UIApplication uiApp)
         {
             UiApplication = uiApp;
+            RevitModelService.OpenLocalModel = EnsureModelOpen;
+            RevitModelService.OpenCloudModel = EnsureModelOpen;
             var testAssemblyPath = command.TestAssembly;
             var methods = command.TestMethods;
             // isolate test assemblies without unloading them

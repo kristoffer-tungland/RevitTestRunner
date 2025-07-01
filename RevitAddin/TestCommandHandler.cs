@@ -23,7 +23,9 @@ public class TestCommandHandler : IExternalEventHandler
         if (_command == null || _pipe == null || _tcs == null)
             return;
 
-        var resultPath = RevitNUnitExecutor.ExecuteTestsInRevit(_command, app);
+        var resultPath = _command.Command == "RunXunitTests"
+            ? RevitXunitExecutor.ExecuteTestsInRevit(_command, app)
+            : RevitNUnitExecutor.ExecuteTestsInRevit(_command, app);
         using var writer = new StreamWriter(_pipe, leaveOpen: false);
         writer.WriteLine(resultPath);
         writer.Flush();
