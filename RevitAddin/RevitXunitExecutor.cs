@@ -12,6 +12,7 @@ using RevitTestFramework;
 using Xunit.Sdk;
 using System.IO.Pipes;
 using System.Text.Json;
+using System.Threading;
 
 namespace RevitAddin;
 
@@ -70,11 +71,12 @@ public static class RevitXunitExecutor
         return doc;
     }
 
-    public static void ExecuteTestsInRevit(PipeCommand command, UIApplication uiApp, StreamWriter writer)
+    public static void ExecuteTestsInRevit(PipeCommand command, UIApplication uiApp, StreamWriter writer, CancellationToken cancellationToken)
     {
         UiApplication = uiApp;
         RevitModelService.OpenLocalModel = EnsureModelOpen;
         RevitModelService.OpenCloudModel = EnsureModelOpen;
+        RevitModelService.CancellationToken = cancellationToken;
         var testAssemblyPath = command.TestAssembly;
         var methods = command.TestMethods;
         var loadContext = new AssemblyLoadContext("XUnitTestContext", isCollectible: false);
@@ -107,7 +109,7 @@ public static class RevitXunitExecutor
             testCases = testCases.Where(tc => methods.Contains(tc.TestMethod.TestClass.Class.Name + "." + tc.TestMethod.Method.Name)).ToList();
         }
 
-        using var visitor = new StreamingXmlTestExecutionVisitor(writer, assemblyElement, () => false);
+        using var visitor = new StreamingXmlTestExecutionVisitor(writer, assemblyElement, () => cancellationToken.IsCancellationRequested);
         controller.RunTests(testCases, visitor, executionOptions);
         visitor.Finished.WaitOne();
 
@@ -117,6 +119,7 @@ public static class RevitXunitExecutor
         File.WriteAllText(resultsPath, resultXml);
         writer.WriteLine("END");
         writer.Flush();
+        RevitModelService.CancellationToken = CancellationToken.None;
     }
 }
 

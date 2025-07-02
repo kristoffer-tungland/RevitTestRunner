@@ -1,4 +1,4 @@
-namespace RevitAddin;
+namespace RevitAdapterCommon;
 
 public class PipeCommand
 {

@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RevitAdapterCommon;
 
@@ -41,13 +43,30 @@ public static class PipeClientHelper
         return result;
     }
 
-    public static void SendCommandStreaming(object command, Action<string> handleLine)
+    public static void SendCommandStreaming(PipeCommand command, Action<string> handleLine, CancellationToken cancellationToken)
     {
+        using var cancelServer = new NamedPipeServerStream(command.CancelPipe, PipeDirection.Out, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
         using var client = ConnectToRevit();
         var json = JsonSerializer.Serialize(command);
         using var sw = new StreamWriter(client, leaveOpen: true);
         sw.WriteLine(json);
         sw.Flush();
+
+        _ = Task.Run(async () =>
+        {
+            await cancelServer.WaitForConnectionAsync().ConfigureAwait(false);
+            await Task.Run(() =>
+            {
+                cancellationToken.WaitHandle.WaitOne();
+                if (cancelServer.IsConnected)
+                {
+                    using var cw = new StreamWriter(cancelServer);
+                    cw.WriteLine("CANCEL");
+                    cw.Flush();
+                }
+            });
+        });
+
         using var sr = new StreamReader(client);
         string? line;
         while ((line = sr.ReadLine()) != null)
@@ -57,4 +76,7 @@ public static class PipeClientHelper
                 break;
         }
     }
+
+    public static void SendCommandStreaming(PipeCommand command, Action<string> handleLine)
+        => SendCommandStreaming(command, handleLine, CancellationToken.None);
 }
