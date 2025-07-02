@@ -32,10 +32,9 @@ public class TestCommandHandler : IExternalEventHandler
 
         if (string.IsNullOrEmpty(resultPath))
             return;
-        using var writer = new StreamWriter(_pipe, leaveOpen: false);
+        using var writer = new StreamWriter(_pipe, leaveOpen: true);
         writer.WriteLine(resultPath);
         writer.Flush();
-        _pipe.Dispose();
         _tcs.SetResult();
     }
 
