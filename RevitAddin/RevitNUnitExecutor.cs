@@ -7,6 +7,7 @@ using Autodesk.Revit.UI;
 using NUnit.Engine;
 using System.IO.Pipes;
 using System.Text.Json;
+using System.Threading;
 
 using RevitTestFramework;
 namespace RevitAddin
@@ -66,11 +67,12 @@ namespace RevitAddin
             return doc;
         }
 
-        public static void ExecuteTestsInRevit(PipeCommand command, UIApplication uiApp, StreamWriter writer)
+        public static void ExecuteTestsInRevit(PipeCommand command, UIApplication uiApp, StreamWriter writer, CancellationToken cancellationToken)
         {
             UiApplication = uiApp;
             RevitModelService.OpenLocalModel = EnsureModelOpen;
             RevitModelService.OpenCloudModel = EnsureModelOpen;
+            RevitModelService.CancellationToken = cancellationToken;
             var testAssemblyPath = command.TestAssembly;
             var methods = command.TestMethods;
             // isolate test assemblies without unloading them
@@ -101,7 +103,16 @@ namespace RevitAddin
                 filter = builder.GetFilter();
             }
 
-            var listener = new StreamingNUnitEventListener(writer);
+            var listener = new StreamingNUnitEventListener(writer, cancellationToken);
+            using var monitor = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _ = Task.Run(() =>
+            {
+                monitor.Token.WaitHandle.WaitOne();
+                if (monitor.IsCancellationRequested)
+                {
+                    try { runner.StopRun(true); } catch { }
+                }
+            });
             var result = runner.Run(listener, filter);
 
             string resultXml = result.OuterXml;
@@ -110,20 +121,25 @@ namespace RevitAddin
             File.WriteAllText(resultsPath, resultXml);
             writer.WriteLine("END");
             writer.Flush();
+            RevitModelService.CancellationToken = CancellationToken.None;
         }
 }
 
 class StreamingNUnitEventListener : ITestEventListener
 {
     private readonly StreamWriter _writer;
+    private readonly CancellationToken _token;
 
-    public StreamingNUnitEventListener(StreamWriter writer)
+    public StreamingNUnitEventListener(StreamWriter writer, CancellationToken token)
     {
         _writer = writer;
+        _token = token;
     }
 
     public void OnTestEvent(string report)
     {
+        if (_token.IsCancellationRequested)
+            return;
         try
         {
             var xml = System.Xml.Linq.XElement.Parse(report);
