@@ -28,26 +28,30 @@ public class PipeServer : System.IDisposable
     {
         while (!_cts.IsCancellationRequested)
         {
-            var server = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+            using var server = new NamedPipeServerStream(
+                _pipeName,
+                PipeDirection.InOut,
+                1,
+                PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous);
+
             await server.WaitForConnectionAsync(_cts.Token).ConfigureAwait(false);
+
             using var reader = new StreamReader(server, leaveOpen: true);
-            var json = await reader.ReadLineAsync().ConfigureAwait(false);
-            if (json == null)
+            while (server.IsConnected && !_cts.IsCancellationRequested)
             {
-                server.Dispose();
-                continue;
-            }
-            var command = JsonSerializer.Deserialize<PipeCommand>(json);
-            if (command != null)
-            {
-                var tcs = new TaskCompletionSource();
-                _handler.SetContext(command, server, tcs);
-                _externalEvent.Raise();
-                await tcs.Task.ConfigureAwait(false);
-            }
-            else
-            {
-                server.Dispose();
+                var json = await reader.ReadLineAsync().ConfigureAwait(false);
+                if (json == null)
+                    break;
+
+                var command = JsonSerializer.Deserialize<PipeCommand>(json);
+                if (command != null)
+                {
+                    var tcs = new TaskCompletionSource();
+                    _handler.SetContext(command, server, tcs);
+                    _externalEvent.Raise();
+                    await tcs.Task.ConfigureAwait(false);
+                }
             }
         }
     }

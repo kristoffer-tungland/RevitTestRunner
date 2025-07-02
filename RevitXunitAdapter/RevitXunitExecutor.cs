@@ -1,15 +1,13 @@
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Adapter;
-using System.IO.Pipes;
+using RevitAdapterCommon;
 using System.Text.Json;
-using System.Diagnostics;
 
-namespace RevitTestAdapter
+namespace RevitXunitAdapter
 {
-    [ExtensionUri("executor://RevitTestExecutor")]
-public class RevitTestExecutor : ITestExecutor
-{
-        private const string PipeNamePrefix = "RevitTestPipe_";
+    [ExtensionUri("executor://RevitXunitExecutor")]
+public class RevitXunitExecutor : ITestExecutor
+    {
         public void RunTests(IEnumerable<TestCase> tests, IRunContext runContext, IFrameworkHandle frameworkHandle)
         {
             var assembly = tests.First().Source;
@@ -27,54 +25,28 @@ public class RevitTestExecutor : ITestExecutor
 
         private static string SendRunCommand(string assembly, string[] methods)
         {
-            using var client = ConnectToRevit();
             var command = new
             {
-                Command = "RunTests",
+                Command = "RunXunitTests",
                 TestAssembly = assembly,
                 TestMethods = methods
             };
-            var json = JsonSerializer.Serialize(command);
-            using var sw = new StreamWriter(client, leaveOpen: true);
-            sw.WriteLine(json);
-            sw.Flush();
-            using var sr = new StreamReader(client);
-            var result = sr.ReadLine() ?? string.Empty;
-            return result;
-        }
-
-        private static NamedPipeClientStream ConnectToRevit()
-        {
-            foreach (var proc in Process.GetProcessesByName("Revit"))
-            {
-                var pipeName = PipeNamePrefix + proc.Id;
-                var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
-                try
-                {
-                    client.Connect(100);
-                    return client;
-                }
-                catch
-                {
-                    client.Dispose();
-                }
-            }
-            throw new InvalidOperationException("No Revit process with test pipe found.");
+            return PipeClientHelper.SendCommand(command);
         }
 
         private static void ParseResults(string resultXmlPath, IFrameworkHandle frameworkHandle, string source)
         {
             var doc = System.Xml.Linq.XDocument.Load(resultXmlPath);
-            var testCases = doc.Descendants("test-case");
+            var testCases = doc.Descendants("test");
             foreach (var test in testCases)
             {
-                var fullname = test.Attribute("fullname")!.Value;
+                var fullname = test.Attribute("name")!.Value;
                 var outcome = test.Attribute("result")!.Value;
-                var duration = double.Parse(test.Attribute("duration")!.Value);
-                var tc = new TestCase(fullname, new Uri("executor://RevitTestExecutor"), source);
+                var duration = double.Parse(test.Attribute("time")?.Value ?? "0");
+                var tc = new TestCase(fullname, new Uri("executor://RevitXunitExecutor"), source);
                 var tr = new TestResult(tc)
                 {
-                    Outcome = outcome == "Passed" ? TestOutcome.Passed : outcome == "Failed" ? TestOutcome.Failed : TestOutcome.Skipped,
+                    Outcome = outcome == "Pass" ? TestOutcome.Passed : outcome == "Fail" ? TestOutcome.Failed : TestOutcome.Skipped,
                     Duration = TimeSpan.FromSeconds(duration)
                 };
                 if (outcome == "Failed")

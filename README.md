@@ -1,12 +1,16 @@
 # Revit Test Runner
 
-This repository contains a minimal proof of concept for running NUnit based Revit tests inside Revit and reporting the results back to Visual Studio Test Explorer.
+This repository contains a minimal proof of concept for running NUnit- and xUnit-based Revit tests inside Revit and reporting the results back to Visual Studio Test Explorer.
 
 ## Projects
 
-- **RevitAddin** – Add-in loaded into Revit. Implements a simple NUnit runner and a named pipe server.
-- **RevitTestAdapter** – Custom test adapter for Visual Studio. Discovers tests and sends execution commands to the Revit process via a named pipe whose name includes the Revit process id.
-- **MyRevitTests** – Example test library that uses the `RevitTestModel` attribute.
+- **RevitAddin** – Add-in loaded into Revit. Implements simple NUnit and xUnit runners and a named pipe server.
+- **RevitAdapterCommon** – Shared helper library for connecting the adapters to the Revit pipe.
+- **RevitNUnitAdapter** – Test adapter for NUnit. Discovers tests and sends execution commands to the Revit process.
+- **RevitTestFramework** – Attributes and helpers shared by the add-in and test projects.
+- **RevitXunitAdapter** – Test adapter for xUnit.
+- **MyRevitTestsNUnit** – Example NUnit test library that uses the `RevitNUnitTestModel` attribute.
+- **MyRevitTestsXunit** – Example xUnit test library that uses the `RevitXunitTestModel` attribute.
 
 ## Building
 
@@ -19,18 +23,18 @@ dotnet build RevitTestRunner.sln
 ## Sample Test
 
 ```csharp
-[assembly: RevitAddin.RevitTransaction]
 [Test]
-[RevitTestModel("proj-guid", "model-guid")]
+[RevitNUnitTestModel("proj-guid", "model-guid")]
 public void TestWalls()
 {
-    Assert.IsNotNull(RevitAddin.RevitNUnitExecutor.CurrentDocument);
+    Assert.IsNotNull(RevitModelService.CurrentDocument);
 }
 ```
 
-The `RevitTestModel` attribute accepts either a pair of BIM 360 GUIDs or a local
-file path:
+The `RevitNUnitTestModel` attribute ensures the specified model is open and wraps the
+test in a transaction group. It accepts either a pair of BIM 360 GUIDs or a
+local file path:
 
 ```csharp
-[RevitTestModel(@"C:\\Models\\sample.rvt")]
+[RevitNUnitTestModel(@"C:\\Models\\sample.rvt")]
 ```

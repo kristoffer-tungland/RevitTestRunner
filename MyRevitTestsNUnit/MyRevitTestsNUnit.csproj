@@ -6,9 +6,12 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
     <PackageReference Include="NUnit" Version="3.13.3" />
-    <PackageReference Include="NUnit.Engine" Version="3.17.1" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.6.3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\RevitTestFramework\RevitTestFramework.csproj" />
   </ItemGroup>
 
 </Project>

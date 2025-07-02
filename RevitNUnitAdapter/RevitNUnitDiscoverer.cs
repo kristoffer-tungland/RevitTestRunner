@@ -2,11 +2,11 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Adapter;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 
-namespace RevitTestAdapter
+namespace RevitNUnitAdapter
 {
     [FileExtension(".dll")]
-    [DefaultExecutorUri("executor://RevitTestExecutor")]
-    public class RevitTestDiscoverer : ITestDiscoverer
+    [DefaultExecutorUri("executor://RevitNUnitExecutor")]
+    public class RevitNUnitDiscoverer : ITestDiscoverer
     {
         public void DiscoverTests(IEnumerable<string> sources, IDiscoveryContext discoveryContext, IMessageLogger logger, ITestCaseDiscoverySink discoverySink)
         {
@@ -19,7 +19,7 @@ namespace RevitTestAdapter
                     {
                         if (method.GetCustomAttributes(typeof(NUnit.Framework.TestAttribute), true).Any())
                         {
-                            var tc = new TestCase($"{type.FullName}.{method.Name}", new Uri("executor://RevitTestExecutor"), source);
+                            var tc = new TestCase($"{type.FullName}.{method.Name}", new Uri("executor://RevitNUnitExecutor"), source);
                             discoverySink.SendTestCase(tc);
                         }
                     }
