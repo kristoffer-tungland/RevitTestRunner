@@ -1,6 +1,6 @@
 # Revit Test Runner
 
-This repository contains a minimal proof of concept for running NUnit and xUnit based Revit tests inside Revit and reporting the results back to Visual Studio Test Explorer.
+This repository contains a minimal proof of concept for running NUnit- and xUnit-based Revit tests inside Revit and reporting the results back to Visual Studio Test Explorer.
 
 ## Projects
 
