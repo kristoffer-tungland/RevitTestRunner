@@ -27,7 +27,7 @@ public class RevitNUnitExecutor : ITestExecutor
         {
             var command = new
             {
-                Command = "RunTests",
+                Command = "RunNUnitTests",
                 TestAssembly = assembly,
                 TestMethods = methods
             };

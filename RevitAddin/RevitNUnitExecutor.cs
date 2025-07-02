@@ -102,7 +102,7 @@ namespace RevitAddin
             var result = runner.Run(null, filter);
 
             string resultXml = result.OuterXml;
-            var fileName = $"RevitTestResults_{Guid.NewGuid():N}.xml";
+            var fileName = $"RevitNUnitResults_{Guid.NewGuid():N}.xml";
             var resultsPath = Path.Combine(Path.GetTempPath(), fileName);
             File.WriteAllText(resultsPath, resultXml);
             return resultsPath;
