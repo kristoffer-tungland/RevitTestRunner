@@ -10,6 +10,8 @@ using Xunit;
 using Xunit.Abstractions;
 using RevitTestFramework;
 using Xunit.Sdk;
+using System.IO.Pipes;
+using System.Text.Json;
 
 namespace RevitAddin;
 
@@ -68,7 +70,7 @@ public static class RevitXunitExecutor
         return doc;
     }
 
-    public static string ExecuteTestsInRevit(PipeCommand command, UIApplication uiApp)
+    public static void ExecuteTestsInRevit(PipeCommand command, UIApplication uiApp, StreamWriter writer)
     {
         UiApplication = uiApp;
         RevitModelService.OpenLocalModel = EnsureModelOpen;
@@ -105,7 +107,7 @@ public static class RevitXunitExecutor
             testCases = testCases.Where(tc => methods.Contains(tc.TestMethod.TestClass.Class.Name + "." + tc.TestMethod.Method.Name)).ToList();
         }
 
-        using var visitor = new XmlTestExecutionVisitor(assemblyElement, () => false);
+        using var visitor = new StreamingXmlTestExecutionVisitor(writer, assemblyElement, () => false);
         controller.RunTests(testCases, visitor, executionOptions);
         visitor.Finished.WaitOne();
 
@@ -113,6 +115,61 @@ public static class RevitXunitExecutor
         var fileName = $"RevitXunitResults_{Guid.NewGuid():N}.xml";
         var resultsPath = Path.Combine(Path.GetTempPath(), fileName);
         File.WriteAllText(resultsPath, resultXml);
-        return resultsPath;
+        writer.WriteLine("END");
+        writer.Flush();
+    }
+}
+
+class StreamingXmlTestExecutionVisitor : XmlTestExecutionVisitor
+{
+    private readonly StreamWriter _writer;
+
+    public StreamingXmlTestExecutionVisitor(StreamWriter writer, XElement assemblyElement, Func<bool> cancelThunk)
+        : base(assemblyElement, cancelThunk)
+    {
+        _writer = writer;
+    }
+
+    private void Send(PipeTestResultMessage msg)
+    {
+        var json = JsonSerializer.Serialize(msg);
+        _writer.WriteLine(json);
+        _writer.Flush();
+    }
+
+    protected override bool Visit(ITestPassed testPassed)
+    {
+        Send(new PipeTestResultMessage
+        {
+            Name = testPassed.Test.DisplayName,
+            Outcome = "Passed",
+            Duration = (double)testPassed.ExecutionTime
+        });
+        return base.Visit(testPassed);
+    }
+
+    protected override bool Visit(ITestFailed testFailed)
+    {
+        Send(new PipeTestResultMessage
+        {
+            Name = testFailed.Test.DisplayName,
+            Outcome = "Failed",
+            Duration = (double)testFailed.ExecutionTime,
+            ErrorMessage = string.Join(System.Environment.NewLine, testFailed.Messages ?? System.Array.Empty<string>()),
+            ErrorStackTrace = string.Join(System.Environment.NewLine, testFailed.StackTraces ?? System.Array.Empty<string>())
+        });
+        return base.Visit(testFailed);
+    }
+
+    protected override bool Visit(ITestSkipped testSkipped)
+    {
+        Send(new PipeTestResultMessage
+        {
+            Name = testSkipped.Test.DisplayName,
+            Outcome = "Skipped",
+            Duration = 0,
+            ErrorMessage = testSkipped.Reason
+        });
+        return base.Visit(testSkipped);
     }
 }

@@ -40,4 +40,21 @@ public static class PipeClientHelper
         var result = sr.ReadLine() ?? string.Empty;
         return result;
     }
+
+    public static void SendCommandStreaming(object command, Action<string> handleLine)
+    {
+        using var client = ConnectToRevit();
+        var json = JsonSerializer.Serialize(command);
+        using var sw = new StreamWriter(client, leaveOpen: true);
+        sw.WriteLine(json);
+        sw.Flush();
+        using var sr = new StreamReader(client);
+        string? line;
+        while ((line = sr.ReadLine()) != null)
+        {
+            handleLine(line);
+            if (line == "END")
+                break;
+        }
+    }
 }
