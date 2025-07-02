@@ -12,18 +12,16 @@ public class RevitNUnitExecutor : ITestExecutor
         {
             var assembly = tests.First().Source;
             var testNames = tests.Select(t => t.FullyQualifiedName).ToArray();
-            var resultPath = SendRunCommand(assembly, testNames);
-            ParseResults(resultPath, frameworkHandle, assembly);
+            SendRunCommandStreaming(assembly, testNames, frameworkHandle);
         }
 
         public void RunTests(IEnumerable<string> sources, IRunContext runContext, IFrameworkHandle frameworkHandle)
         {
             var assembly = sources.First();
-            var resultPath = SendRunCommand(assembly, Array.Empty<string>());
-            ParseResults(resultPath, frameworkHandle, assembly);
+            SendRunCommandStreaming(assembly, Array.Empty<string>(), frameworkHandle);
         }
 
-        private static string SendRunCommand(string assembly, string[] methods)
+        private static void SendRunCommandStreaming(string assembly, string[] methods, IFrameworkHandle frameworkHandle)
         {
             var command = new
             {
@@ -31,32 +29,26 @@ public class RevitNUnitExecutor : ITestExecutor
                 TestAssembly = assembly,
                 TestMethods = methods
             };
-            return PipeClientHelper.SendCommand(command);
-        }
 
-        private static void ParseResults(string resultXmlPath, IFrameworkHandle frameworkHandle, string source)
-        {
-            var doc = System.Xml.Linq.XDocument.Load(resultXmlPath);
-            var testCases = doc.Descendants("test-case");
-            foreach (var test in testCases)
+            PipeClientHelper.SendCommandStreaming(command, line =>
             {
-                var fullname = test.Attribute("fullname")!.Value;
-                var outcome = test.Attribute("result")!.Value;
-                var duration = double.Parse(test.Attribute("duration")!.Value);
-                var tc = new TestCase(fullname, new Uri("executor://RevitNUnitExecutor"), source);
+                if (line == "END")
+                    return;
+
+                var msg = JsonSerializer.Deserialize<PipeTestResultMessage>(line);
+                if (msg == null)
+                    return;
+
+                var tc = new TestCase(msg.Name, new Uri("executor://RevitNUnitExecutor"), assembly);
                 var tr = new TestResult(tc)
                 {
-                    Outcome = outcome == "Passed" ? TestOutcome.Passed : outcome == "Failed" ? TestOutcome.Failed : TestOutcome.Skipped,
-                    Duration = TimeSpan.FromSeconds(duration)
+                    Outcome = msg.Outcome == "Passed" || msg.Outcome == "Pass" ? TestOutcome.Passed : msg.Outcome == "Failed" || msg.Outcome == "Fail" ? TestOutcome.Failed : TestOutcome.Skipped,
+                    Duration = TimeSpan.FromSeconds(msg.Duration),
+                    ErrorMessage = msg.ErrorMessage,
+                    ErrorStackTrace = msg.ErrorStackTrace
                 };
-                if (outcome == "Failed")
-                {
-                    var failure = test.Element("failure");
-                    tr.ErrorMessage = failure?.Element("message")?.Value;
-                    tr.ErrorStackTrace = failure?.Element("stack-trace")?.Value;
-                }
                 frameworkHandle.RecordResult(tr);
-            }
+            });
         }
 
         public void Cancel() { }

@@ -5,6 +5,8 @@ using System.Runtime.Loader;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using NUnit.Engine;
+using System.IO.Pipes;
+using System.Text.Json;
 
 using RevitTestFramework;
 namespace RevitAddin
@@ -64,7 +66,7 @@ namespace RevitAddin
             return doc;
         }
 
-        public static string ExecuteTestsInRevit(PipeCommand command, UIApplication uiApp)
+        public static void ExecuteTestsInRevit(PipeCommand command, UIApplication uiApp, StreamWriter writer)
         {
             UiApplication = uiApp;
             RevitModelService.OpenLocalModel = EnsureModelOpen;
@@ -99,13 +101,52 @@ namespace RevitAddin
                 filter = builder.GetFilter();
             }
 
-            var result = runner.Run(null, filter);
+            var listener = new StreamingNUnitEventListener(writer);
+            var result = runner.Run(listener, filter);
 
             string resultXml = result.OuterXml;
             var fileName = $"RevitNUnitResults_{Guid.NewGuid():N}.xml";
             var resultsPath = Path.Combine(Path.GetTempPath(), fileName);
             File.WriteAllText(resultsPath, resultXml);
-            return resultsPath;
+            writer.WriteLine("END");
+            writer.Flush();
         }
+}
+
+class StreamingNUnitEventListener : ITestEventListener
+{
+    private readonly StreamWriter _writer;
+
+    public StreamingNUnitEventListener(StreamWriter writer)
+    {
+        _writer = writer;
     }
+
+    public void OnTestEvent(string report)
+    {
+        try
+        {
+            var xml = System.Xml.Linq.XElement.Parse(report);
+            if (xml.Name == "test-case")
+            {
+                var msg = new PipeTestResultMessage
+                {
+                    Name = xml.Attribute("fullname")?.Value ?? xml.Attribute("name")?.Value ?? string.Empty,
+                    Outcome = xml.Attribute("result")?.Value ?? string.Empty,
+                    Duration = double.TryParse(xml.Attribute("duration")?.Value, out var d) ? d : 0,
+                };
+                if (msg.Outcome == "Failed")
+                {
+                    var failure = xml.Element("failure");
+                    msg.ErrorMessage = failure?.Element("message")?.Value;
+                    msg.ErrorStackTrace = failure?.Element("stack-trace")?.Value;
+                }
+                var json = JsonSerializer.Serialize(msg);
+                _writer.WriteLine(json);
+                _writer.Flush();
+            }
+        }
+        catch { }
+    }
+}
 }
