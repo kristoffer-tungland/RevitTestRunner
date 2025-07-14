@@ -8,4 +8,20 @@
     <ProjectReference Include="..\RevitAddin.Common\RevitAddin.Common.csproj" />
     <ProjectReference Include="..\RevitTestFramework.NUnit\RevitTestFramework.NUnit.csproj" />
   </ItemGroup>
+  
+  <!-- Include installation script in the build output -->
+  <ItemGroup>
+    <None Include="Install-RevitNUnitAddin.ps1">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  
+  <!-- Copy the RevitTestFramework.Common.exe to the output directory to enable manifest generation -->
+  <Target Name="CopyRevitTestFrameworkCommon" AfterTargets="Build">
+    <ItemGroup>
+      <RevitCommonExe Include="..\RevitTestFramework.Common\bin\$(Configuration)\net8.0\RevitTestFramework.Common*.exe" />
+    </ItemGroup>
+    <Copy SourceFiles="@(RevitCommonExe)" DestinationFolder="$(OutDir)" ContinueOnError="true" />
+    <Message Text="Copied RevitTestFramework.Common.exe to output directory" Importance="high" />
+  </Target>
 </Project>
