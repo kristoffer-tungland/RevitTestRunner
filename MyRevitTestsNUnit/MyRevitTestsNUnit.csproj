@@ -11,6 +11,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\RevitAddin.NUnit\RevitAddin.NUnit.csproj" />
     <ProjectReference Include="..\RevitTestFramework.NUnit\RevitTestFramework.NUnit.csproj" />
   </ItemGroup>
 
