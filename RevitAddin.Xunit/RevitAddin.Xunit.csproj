@@ -1,5 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- Common properties and version info are in Directory.Build.props -->
+  
+  <!-- Enable copying of all dependency DLLs to output directory -->
+  <PropertyGroup>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  
   <ItemGroup>
     <PackageReference Include="xunit.runner.utility" Version="2.9.3" />
     <PackageReference Include="xunit.extensibility.execution" Version="2.9.3" />
@@ -23,5 +29,19 @@
     </ItemGroup>
     <Copy SourceFiles="@(RevitCommonExe)" DestinationFolder="$(OutDir)" ContinueOnError="true" />
     <Message Text="Copied RevitTestFramework.Common.exe to output directory" Importance="high" />
+  </Target>
+  
+  <!-- Additional target to ensure all xUnit dependencies are copied -->
+  <Target Name="CopyXunitDependencies" AfterTargets="Build">
+    <ItemGroup>
+      <XunitDependencies Include="..\packages\**\xunit*.dll" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(XunitDependencies)"
+      DestinationFolder="$(OutDir)"
+      SkipUnchangedFiles="true"
+      ContinueOnError="true"
+    />
+    <Message Text="Attempted to copy additional xUnit dependencies to output directory" Importance="high" />
   </Target>
 </Project>

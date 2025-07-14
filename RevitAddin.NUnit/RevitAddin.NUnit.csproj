@@ -1,5 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- Common properties and version info are in Directory.Build.props -->
+
+  <!-- Enable copying of all dependency DLLs to output directory -->
+  <PropertyGroup>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  
   <ItemGroup>
     <PackageReference Include="NUnit" Version="4.3.2" />
     <PackageReference Include="NUnit.Engine" Version="3.20.1" />
@@ -23,5 +29,19 @@
     </ItemGroup>
     <Copy SourceFiles="@(RevitCommonExe)" DestinationFolder="$(OutDir)" ContinueOnError="true" />
     <Message Text="Copied RevitTestFramework.Common.exe to output directory" Importance="high" />
+  </Target>
+  
+  <!-- Additional target to ensure all NUnit dependencies are copied -->
+  <Target Name="CopyNUnitDependencies" AfterTargets="Build">
+    <ItemGroup>
+      <NUnitDependencies Include="..\packages\**\NUnit*.dll" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(NUnitDependencies)"
+      DestinationFolder="$(OutDir)"
+      SkipUnchangedFiles="true"
+      ContinueOnError="true"
+    />
+    <Message Text="Attempted to copy additional NUnit dependencies to output directory" Importance="high" />
   </Target>
 </Project>

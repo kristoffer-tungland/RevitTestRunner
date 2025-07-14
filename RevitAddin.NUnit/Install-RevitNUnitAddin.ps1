@@ -29,35 +29,39 @@ if ([string]::IsNullOrEmpty($AssemblyPath)) {
 
 # Extract Revit version and assembly version from the assembly name
 $assemblyName = [System.IO.Path]::GetFileNameWithoutExtension($AssemblyPath)
-$matches = [regex]::Match($assemblyName, 'RevitAddin\.NUnit\.(?<assemblyVersion>\d+\.\d+\.\d+)')
 
-$assemblyVersion = "1.0.0"  # Default version
-if ($matches.Success) {
-    $assemblyVersion = $matches.Groups['assemblyVersion'].Value
-    Write-Host "Extracted assembly version: $assemblyVersion"
-}
-
-# If RevitVersion is not specified, try to extract it from the filename or use default
-if ([string]::IsNullOrEmpty($RevitVersion)) {
-    $revitMatches = [regex]::Match($assemblyName, 'RevitAddin\.NUnit\.(?<revitVersion>\d{4})\.')
-    if ($revitMatches.Success) {
+# First extract the Revit version
+$revitMatches = [regex]::Match($assemblyName, 'RevitAddin\.NUnit\.(?<revitVersion>\d{4})')
+if ($revitMatches.Success) {
+    if ([string]::IsNullOrEmpty($RevitVersion)) {
         $RevitVersion = $revitMatches.Groups['revitVersion'].Value
         Write-Host "Extracted Revit version: $RevitVersion"
+    }
+
+    # Now extract the assembly version that comes after the Revit version
+    $assemblyVersionMatches = [regex]::Match($assemblyName, 'RevitAddin\.NUnit\.\d{4}\.(?<assemblyVersion>\d+\.\d+\.\d+)')
+    if ($assemblyVersionMatches.Success) {
+        $assemblyVersion = $assemblyVersionMatches.Groups['assemblyVersion'].Value
+        Write-Host "Extracted assembly version: $assemblyVersion"
     } else {
-        # Get RevitVersion from Directory.Build.props if accessible
-        $buildPropsPath = Join-Path (Split-Path -Parent (Split-Path -Parent $scriptDir)) "Directory.Build.props"
-        if (Test-Path $buildPropsPath) {
-            [xml]$buildPropsXml = Get-Content $buildPropsPath
-            $RevitVersion = $buildPropsXml.Project.PropertyGroup | 
-                Where-Object { $_.RevitVersion } | 
-                ForEach-Object { $_.RevitVersion } | 
-                Select-Object -First 1
-        }
-        
-        if ([string]::IsNullOrEmpty($RevitVersion)) {
-            $RevitVersion = "2025"  # Default Revit version
-        }
-        Write-Host "Using Revit version: $RevitVersion"
+        $assemblyVersion = "1.0.0"  # Default version if not found
+        Write-Host "Using default assembly version: $assemblyVersion"
+    }
+} else {
+    # If no Revit version found in filename, use default assembly version pattern
+    $assemblyVersionMatches = [regex]::Match($assemblyName, 'RevitAddin\.NUnit\.(?<assemblyVersion>\d+\.\d+\.\d+)')
+    if ($assemblyVersionMatches.Success) {
+        $assemblyVersion = $assemblyVersionMatches.Groups['assemblyVersion'].Value
+        Write-Host "Extracted assembly version: $assemblyVersion"
+    } else {
+        $assemblyVersion = "1.0.0"  # Default version
+        Write-Host "Using default assembly version: $assemblyVersion"
+    }
+    
+    # Handle Revit version if it wasn't in the filename
+    if ([string]::IsNullOrEmpty($RevitVersion)) {
+        $RevitVersion = "2025"  # Default Revit version
+        Write-Host "Using default Revit version: $RevitVersion"
     }
 }
 
@@ -89,14 +93,53 @@ foreach ($dep in $dependencies) {
     Write-Host "Copied dependency: $($dep.Name) -> $destPath"
 }
 
-# Find the RevitTestFramework.Common tool for generating addin manifests
-$commonExe = Get-ChildItem -Path $assemblyDir -Filter "RevitTestFramework.Common*.exe" | Select-Object -First 1
+# Find the RevitTestFramework.Common.exe
+function Find-RevitCommonExe {
+    param (
+        [string]$StartingDirectory
+    )
+    
+    # First check in the current script directory (most likely location)
+    $commonExeFiles = Get-ChildItem -Path $StartingDirectory -Filter "RevitTestFramework.Common*.exe" -ErrorAction SilentlyContinue
+    if ($commonExeFiles.Count -gt 0) {
+        return $commonExeFiles[0].FullName
+    }
+    
+    # Check one level up in the solution directory structure for RevitTestFramework.Common project
+    $solutionDir = Split-Path -Parent $StartingDirectory
+    $commonProjectDir = Join-Path $solutionDir "RevitTestFramework.Common"
+    $configurations = @("Debug", "Release")
+    $frameworks = @("net8.0", "net9.0")
+    
+    foreach ($config in $configurations) {
+        foreach ($framework in $frameworks) {
+            $binPath = Join-Path $commonProjectDir "bin\$config\$framework"
+            if (Test-Path $binPath) {
+                $exeFiles = Get-ChildItem -Path $binPath -Filter "RevitTestFramework.Common*.exe" -ErrorAction SilentlyContinue
+                if ($exeFiles.Count -gt 0) {
+                    return $exeFiles[0].FullName
+                }
+            }
+        }
+    }
+    
+    # Check for any RevitTestFramework.Common.exe in solution directory recursively (last resort)
+    $exeFiles = Get-ChildItem -Path $solutionDir -Filter "RevitTestFramework.Common*.exe" -Recurse -ErrorAction SilentlyContinue | 
+                Where-Object { $_.Directory.FullName -like "*\bin\*" }
+    if ($exeFiles.Count -gt 0) {
+        return $exeFiles[0].FullName
+    }
+    
+    # Return null if not found
+    return $null
+}
 
-if ($commonExe) {
-    $destExePath = Join-Path $OutputDir $commonExe.Name
-    Copy-Item -Path $commonExe.FullName -Destination $destExePath -Force
-    Write-Host "Copied manifest tool: $($commonExe.Name) -> $destExePath"
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$commonExePath = Find-RevitCommonExe -StartingDirectory $scriptDir
 
+if ($commonExePath) {
+    Write-Host "Found RevitTestFramework.Common executable: $commonExePath"
+    
     # Generate addin manifest
     $addinDir = Join-Path $env:AppData "Autodesk\Revit\Addins\$RevitVersion"
     if (-not (Test-Path $addinDir)) {
@@ -105,8 +148,8 @@ if ($commonExe) {
 
     $installedAssemblyPath = Join-Path $OutputDir ([System.IO.Path]::GetFileName($AssemblyPath))
     
-    Write-Host "Generating addin manifest..."
-    $manifestToolCommand = "& '$destExePath' generate-nunit-manifest --output '$addinDir' --revit-version '$RevitVersion' --assembly '$installedAssemblyPath' --package-version '$assemblyVersion'"
+    Write-Host "Generating addin manifest using RevitTestFramework.Common..."
+    $manifestToolCommand = "& '$commonExePath' generate-nunit-manifest --output '$addinDir' --revit-version '$RevitVersion' --assembly '$installedAssemblyPath' --package-version '$assemblyVersion'"
     
     Write-Host "Running: $manifestToolCommand"
     Invoke-Expression $manifestToolCommand
@@ -119,8 +162,4 @@ if ($commonExe) {
 } else {
     Write-Warning "RevitTestFramework.Common.exe not found. Addin manifest will not be generated."
     Write-Warning "To generate the addin manifest, run RevitTestFramework.Common.exe manually:"
-    Write-Warning "RevitTestFramework.Common.exe generate-nunit-manifest --revit-version $RevitVersion --assembly '$AssemblyPath' --package-version '$assemblyVersion'"
-}
-
-Write-Host "Installation completed successfully." -ForegroundColor Green
-Write-Host "RevitAddin.NUnit installed to: $OutputDir"
+    Write-Warning "RevitTestFramework.Common

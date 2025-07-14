@@ -56,7 +56,7 @@ public static class RevitAddInManifestGenerator
         revitAddIns.AppendChild(addInApplication);
 
         var appId = doc.CreateElement("AddInId");
-        appId.InnerText = addinAppId.ToString("B").ToUpper(); // Format as uppercase with braces
+        appId.InnerText = addinAppId.ToString().ToUpper(); // Format as uppercase with braces
         addInApplication.AppendChild(appId);
 
         var appName = doc.CreateElement("Name");
@@ -65,10 +65,12 @@ public static class RevitAddInManifestGenerator
 
         var appAssembly = doc.CreateElement("Assembly");
         appAssembly.InnerText = assemblyFullPath;
-        addInApplication.AppendChild(appAssembly);
+        addInApplication.AppendChild(appAssembly);  
 
-        // Extract the namespace from the assembly name (without version)
-        string namespaceName = baseClassName;
+        // Extract the proper namespace from the assembly name - remove any version components
+        // First extract the base namespace (e.g., "RevitAddin.Xunit" from "RevitAddin.Xunit.2025.1.0.0")
+        string namespaceName = Regex.Replace(baseClassName, @"\.\d{4}(\.\d+\.\d+\.\d+)?", "");
+        
         var appFullClassName = doc.CreateElement("FullClassName");
         appFullClassName.InnerText = $"{namespaceName}.{applicationClassName}";
         addInApplication.AppendChild(appFullClassName);

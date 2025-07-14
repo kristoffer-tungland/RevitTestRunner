@@ -14,7 +14,7 @@ public class MyRevitTestsClass
     }
 
     [Fact]
-    [RevitXunitTestModel(@"C:\\Models\\sample.rvt")]
+    [RevitXunitTestModel(@"C:\Program Files\Autodesk\Revit 2025\Samples\Snowdon Towers Sample Architectural.rvt")]
     public void TestLocalFile()
     {
         Assert.NotNull(RevitModelService.CurrentDocument);
