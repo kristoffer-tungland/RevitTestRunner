@@ -1,4 +1,3 @@
-using System;
 using System.Reflection;
 using Xunit.Sdk;
 using RevitTestFramework.Common;

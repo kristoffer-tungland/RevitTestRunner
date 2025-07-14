@@ -1,6 +1,4 @@
-using System;
 using Autodesk.Revit.DB;
-using System.Threading;
 
 namespace RevitTestFramework.Common;
 

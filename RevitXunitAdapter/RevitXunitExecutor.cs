@@ -2,8 +2,6 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Adapter;
 using RevitAdapterCommon;
 using System.Text.Json;
-using System.Threading;
-using System;
 
 namespace RevitXunitAdapter
 {

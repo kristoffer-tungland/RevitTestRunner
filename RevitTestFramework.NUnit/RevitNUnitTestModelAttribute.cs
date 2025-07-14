@@ -1,4 +1,3 @@
-using System;
 using NUnit.Framework;
 using NUnit.Framework.Interfaces;
 using RevitTestFramework.Common;

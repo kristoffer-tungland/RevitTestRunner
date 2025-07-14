@@ -2,17 +2,17 @@ using System.IO.Pipes;
 using System.Text.Json;
 using Autodesk.Revit.UI;
 
-namespace RevitAddin;
+namespace RevitAddin.Common;
 
-public class PipeServer : System.IDisposable
+public class PipeServer : IDisposable
 {
     private readonly string _pipeName;
     private readonly ExternalEvent _externalEvent;
-    private readonly TestCommandHandler _handler;
+    private readonly ITestCommandHandler _handler;
     private readonly CancellationTokenSource _cts = new();
     private Task? _listenerTask;
 
-    public PipeServer(string pipeName, ExternalEvent externalEvent, TestCommandHandler handler)
+    public PipeServer(string pipeName, ExternalEvent externalEvent, ITestCommandHandler handler)
     {
         _pipeName = pipeName;
         _externalEvent = externalEvent;

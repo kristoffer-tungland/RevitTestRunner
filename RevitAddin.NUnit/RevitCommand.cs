@@ -1,7 +1,7 @@
 using Autodesk.Revit.UI;
 using Autodesk.Revit.DB;
 
-namespace RevitAddin
+namespace RevitAddin.NUnit
 {
     public class RevitCommand : IExternalCommand
     {

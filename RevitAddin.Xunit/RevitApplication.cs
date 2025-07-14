@@ -1,6 +1,8 @@
 using Autodesk.Revit.UI;
+using RevitAddin.Common;
+using System.Diagnostics;
 
-namespace RevitAddin;
+namespace RevitAddin.Xunit;
 
 public class RevitApplication : IExternalApplication
 {
@@ -10,7 +12,7 @@ public class RevitApplication : IExternalApplication
     {
         var handler = new TestCommandHandler();
         var extEvent = ExternalEvent.Create(handler);
-        var pipeName = PipeConstants.PipeNamePrefix + System.Diagnostics.Process.GetCurrentProcess().Id;
+        var pipeName = PipeConstants.PipeNamePrefix + Process.GetCurrentProcess().Id;
         _server = new PipeServer(pipeName, extEvent, handler);
         _server.Start();
         return Result.Succeeded;

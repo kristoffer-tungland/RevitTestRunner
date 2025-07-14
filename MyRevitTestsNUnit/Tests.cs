@@ -1,5 +1,4 @@
 using NUnit.Framework;
-using Autodesk.Revit.DB;
 using RevitTestFramework.NUnit;
 using RevitTestFramework.Common;
 

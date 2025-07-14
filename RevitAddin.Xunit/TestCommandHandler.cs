@@ -1,12 +1,10 @@
-using System.IO;
 using System.IO.Pipes;
-using System.Threading;
-using System.Threading.Tasks;
 using Autodesk.Revit.UI;
+using RevitAddin.Common;
 
-namespace RevitAddin;
+namespace RevitAddin.Xunit;
 
-public class TestCommandHandler : IExternalEventHandler
+public class TestCommandHandler : ITestCommandHandler
 {
     private PipeCommand? _command;
     private NamedPipeServerStream? _pipe;
@@ -40,15 +38,11 @@ public class TestCommandHandler : IExternalEventHandler
         }
         catch { }
 
-        switch (_command.Command)
+        if (_command.Command == "RunXunitTests")
         {
-            case "RunXunitTests":
-                RevitXunitExecutor.ExecuteTestsInRevit(_command, app, writer, cts.Token);
-                break;
-            case "RunNUnitTests":
-                RevitNUnitExecutor.ExecuteTestsInRevit(_command, app, writer, cts.Token);
-                break;
+            RevitXunitExecutor.ExecuteTestsInRevit(_command, app, writer, cts.Token);
         }
+        
         _tcs.SetResult();
     }
 

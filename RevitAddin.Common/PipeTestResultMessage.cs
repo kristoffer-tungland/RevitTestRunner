@@ -1,4 +1,4 @@
-namespace RevitAddin;
+namespace RevitAddin.Common;
 
 public class PipeTestResultMessage
 {

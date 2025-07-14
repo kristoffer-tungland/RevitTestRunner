@@ -1,82 +1,23 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Runtime.Loader;
 using System.Xml.Linq;
-using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Xunit;
 using Xunit.Abstractions;
+using RevitAddin.Common;
 using RevitTestFramework.Common;
-using Xunit.Sdk;
-using System.IO.Pipes;
 using System.Text.Json;
-using System.Threading;
 
-namespace RevitAddin;
+namespace RevitAddin.Xunit;
 
 public static class RevitXunitExecutor
 {
-    public static UIApplication? UiApplication { get; private set; }
-    public static Document? CurrentDocument { get; private set; }
-    private static readonly Dictionary<string, Document> _openDocs = new();
-    private const string LocalPrefix = "local:";
-
-    public static Document EnsureModelOpen(string projectGuid, string modelGuid)
-    {
-        if (UiApplication == null)
-            throw new InvalidOperationException("UI application not initialized");
-
-        var key = $"{projectGuid}:{modelGuid}";
-        if (_openDocs.TryGetValue(key, out var doc) && doc.IsValidObject)
-        {
-            CurrentDocument = doc;
-        RevitModelService.CurrentDocument = doc;
-            return doc;
-        }
-
-        var projGuid = new Guid(projectGuid);
-        var modGuid = new Guid(modelGuid);
-        var cloudPath = ModelPathUtils.ConvertCloudGUIDsToCloudPath(ModelPathUtils.CloudRegionUS, projGuid, modGuid);
-        var app = UiApplication.Application;
-        var openOpts = new OpenOptions();
-        doc = app.OpenDocumentFile(cloudPath, openOpts);
-        _openDocs[key] = doc;
-        CurrentDocument = doc;
-        RevitModelService.CurrentDocument = doc;
-        return doc;
-    }
-
-    public static Document EnsureModelOpen(string localPath)
-    {
-        if (UiApplication == null)
-            throw new InvalidOperationException("UI application not initialized");
-
-        var key = LocalPrefix + localPath;
-        if (_openDocs.TryGetValue(key, out var doc) && doc.IsValidObject)
-        {
-            CurrentDocument = doc;
-        RevitModelService.CurrentDocument = doc;
-            return doc;
-        }
-
-        var modelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(localPath);
-        var app = UiApplication.Application;
-        var opts = new OpenOptions();
-        doc = app.OpenDocumentFile(modelPath, opts);
-        _openDocs[key] = doc;
-        CurrentDocument = doc;
-        RevitModelService.CurrentDocument = doc;
-        return doc;
-    }
-
     public static void ExecuteTestsInRevit(PipeCommand command, UIApplication uiApp, StreamWriter writer, CancellationToken cancellationToken)
     {
-        UiApplication = uiApp;
-        RevitModelService.OpenLocalModel = EnsureModelOpen;
-        RevitModelService.OpenCloudModel = EnsureModelOpen;
+        // Set up model service with our local handlers
+        RevitModelService.OpenLocalModel = localPath => RevitModelUtility.EnsureModelOpen(uiApp, localPath);
+        RevitModelService.OpenCloudModel = (projectGuid, modelGuid) => RevitModelUtility.EnsureModelOpen(uiApp, projectGuid, modelGuid);
         RevitModelService.CancellationToken = cancellationToken;
+        
         var testAssemblyPath = command.TestAssembly;
         var methods = command.TestMethods;
         var loadContext = new AssemblyLoadContext("XUnitTestContext", isCollectible: false);
@@ -123,7 +64,7 @@ public static class RevitXunitExecutor
     }
 }
 
-class StreamingXmlTestExecutionVisitor : XmlTestExecutionVisitor
+internal class StreamingXmlTestExecutionVisitor : XmlTestExecutionVisitor
 {
     private readonly StreamWriter _writer;
 
@@ -158,8 +99,8 @@ class StreamingXmlTestExecutionVisitor : XmlTestExecutionVisitor
             Name = testFailed.Test.DisplayName,
             Outcome = "Failed",
             Duration = (double)testFailed.ExecutionTime,
-            ErrorMessage = string.Join(System.Environment.NewLine, testFailed.Messages ?? System.Array.Empty<string>()),
-            ErrorStackTrace = string.Join(System.Environment.NewLine, testFailed.StackTraces ?? System.Array.Empty<string>())
+            ErrorMessage = string.Join(Environment.NewLine, testFailed.Messages ?? Array.Empty<string>()),
+            ErrorStackTrace = string.Join(Environment.NewLine, testFailed.StackTraces ?? Array.Empty<string>())
         });
         return base.Visit(testFailed);
     }
