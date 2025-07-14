@@ -1,0 +1,36 @@
+<Project>
+  <!-- Version information for all projects -->
+  <PropertyGroup>
+    <!-- Product version -->
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0</AssemblyVersion>
+    <FileVersion>1.0.0</FileVersion>
+    
+    <!-- Common properties for all projects -->
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    
+    <!-- Revit-specific properties -->
+    <RevitVersion>2025</RevitVersion>
+    
+    <!-- Default target framework is net8.0 -->
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  
+  <!-- Properties specific to Revit addin projects -->
+  <PropertyGroup Condition="$(MSBuildProjectName.StartsWith('RevitAddin.'))">
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+  
+  <!-- Properties for test framework projects -->
+  <PropertyGroup Condition="$(MSBuildProjectName.StartsWith('RevitTestFramework.'))">
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+
+  <!-- Properties for adapter projects and related that target .NET 9 -->
+  <PropertyGroup Condition="$(MSBuildProjectName) == 'RevitAdapterCommon' OR
+                            $(MSBuildProjectName) == 'RevitNUnitAdapter' OR
+                            $(MSBuildProjectName) == 'RevitXunitAdapter'">
+    <TargetFramework>net9.0</TargetFramework>
+  </PropertyGroup>
+</Project>

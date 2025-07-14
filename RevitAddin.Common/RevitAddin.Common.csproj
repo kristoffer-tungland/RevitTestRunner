@@ -1,14 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <PlatformTarget>x64</PlatformTarget>
-  </PropertyGroup>
-  
+  <!-- Common properties and version info are in Directory.Build.props -->
   <ItemGroup>
     <ProjectReference Include="..\RevitTestFramework.Common\RevitTestFramework.Common.csproj" />
   </ItemGroup>
-
 </Project>
