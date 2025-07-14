@@ -1,6 +1,7 @@
 using NUnit.Framework;
 using Autodesk.Revit.DB;
-using RevitTestFramework;
+using RevitTestFramework.NUnit;
+using RevitTestFramework.Common;
 
 namespace MyRevitTestsNUnit
 {

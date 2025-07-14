@@ -1,5 +1,6 @@
 using Xunit;
-using RevitTestFramework;
+using RevitTestFramework.Xunit;
+using RevitTestFramework.Common;
 
 namespace MyRevitTestsXunit;
 

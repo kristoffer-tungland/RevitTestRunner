@@ -2,7 +2,7 @@ using System;
 using Autodesk.Revit.DB;
 using System.Threading;
 
-namespace RevitTestFramework;
+namespace RevitTestFramework.Common;
 
 public static class RevitModelService
 {

@@ -2,9 +2,9 @@ using System;
 using System.Threading;
 using Autodesk.Revit.DB;
 
-namespace RevitTestFramework;
+namespace RevitTestFramework.Common;
 
-internal static class RevitTestModelHelper
+public static class RevitTestModelHelper
 {
     private static readonly AsyncLocal<TransactionGroup?> _group = new();
 

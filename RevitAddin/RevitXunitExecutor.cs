@@ -8,7 +8,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Xunit;
 using Xunit.Abstractions;
-using RevitTestFramework;
+using RevitTestFramework.Common;
 using Xunit.Sdk;
 using System.IO.Pipes;
 using System.Text.Json;

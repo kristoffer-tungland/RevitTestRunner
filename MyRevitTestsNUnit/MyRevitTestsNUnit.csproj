@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -11,7 +11,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\RevitTestFramework\RevitTestFramework.csproj" />
+    <ProjectReference Include="..\RevitTestFramework.NUnit\RevitTestFramework.NUnit.csproj" />
   </ItemGroup>
 
 </Project>

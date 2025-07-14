@@ -6,8 +6,6 @@
     <IsTestProject>false</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="NUnit" Version="4.3.2" />
-    <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="Revit_All_Main_Versions_API_x64" Version="2025.0.0" />
   </ItemGroup>
 </Project>

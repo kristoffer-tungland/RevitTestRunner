@@ -1,8 +1,9 @@
 using System;
 using System.Reflection;
 using Xunit.Sdk;
+using RevitTestFramework.Common;
 
-namespace RevitTestFramework;
+namespace RevitTestFramework.Xunit;
 
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
 public class RevitXunitTestModelAttribute : BeforeAfterTestAttribute

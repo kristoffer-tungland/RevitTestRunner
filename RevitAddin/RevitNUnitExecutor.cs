@@ -9,7 +9,7 @@ using System.IO.Pipes;
 using System.Text.Json;
 using System.Threading;
 
-using RevitTestFramework;
+using RevitTestFramework.Common;
 namespace RevitAddin
 {
     public static class RevitNUnitExecutor
