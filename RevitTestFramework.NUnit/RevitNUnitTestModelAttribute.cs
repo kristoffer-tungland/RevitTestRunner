@@ -5,7 +5,7 @@ using RevitTestFramework.Common;
 namespace RevitTestFramework.NUnit;
 
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-public class RevitNUnitTestModelAttribute : Attribute, ITestAction
+public class RevitNUnitTestModelAttribute : NUnitAttribute, IApplyToTest
 {
     public string? ProjectGuid { get; }
     public string? ModelGuid { get; }
@@ -22,21 +22,14 @@ public class RevitNUnitTestModelAttribute : Attribute, ITestAction
         LocalPath = localPath;
     }
 
-    public void BeforeTest(ITest test)
+    public void ApplyToTest(global::NUnit.Framework.Internal.Test test)
     {
-        RevitTestModelHelper.EnsureModelAndStartGroup(
-            LocalPath,
-            ProjectGuid,
-            ModelGuid,
-            RevitModelService.OpenLocalModel!,
-            RevitModelService.OpenCloudModel!,
-            test.Name);
+        if (LocalPath != null)
+            test.Properties.Set("RevitLocalPath", LocalPath);
+        else
+        {
+            test.Properties.Set("RevitProjectGuid", ProjectGuid);
+            test.Properties.Set("RevitModelGuid", ModelGuid);
+        }
     }
-
-    public void AfterTest(ITest test)
-    {
-        RevitTestModelHelper.RollBackTransactionGroup();
-    }
-
-    public ActionTargets Targets => ActionTargets.Test;
 }

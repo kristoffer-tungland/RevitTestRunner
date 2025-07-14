@@ -1,11 +1,13 @@
-using System.Reflection;
+using Xunit;
+using Xunit.Abstractions;
 using Xunit.Sdk;
 using RevitTestFramework.Common;
 
 namespace RevitTestFramework.Xunit;
 
+[XunitTestCaseDiscoverer("RevitTestFramework.Xunit.RevitXunitTestCaseDiscoverer", "RevitTestFramework.Xunit")]
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-public class RevitXunitTestModelAttribute : BeforeAfterTestAttribute
+public class RevitXunitTestModelAttribute : FactAttribute
 {
     public string? ProjectGuid { get; }
     public string? ModelGuid { get; }
@@ -20,21 +22,5 @@ public class RevitXunitTestModelAttribute : BeforeAfterTestAttribute
     public RevitXunitTestModelAttribute(string localPath)
     {
         LocalPath = localPath;
-    }
-
-    public override void Before(MethodInfo methodUnderTest)
-    {
-        RevitTestModelHelper.EnsureModelAndStartGroup(
-            LocalPath,
-            ProjectGuid,
-            ModelGuid,
-            RevitModelService.OpenLocalModel!,
-            RevitModelService.OpenCloudModel!,
-            methodUnderTest.Name);
-    }
-
-    public override void After(MethodInfo methodUnderTest)
-    {
-        RevitTestModelHelper.RollBackTransactionGroup();
     }
 }
