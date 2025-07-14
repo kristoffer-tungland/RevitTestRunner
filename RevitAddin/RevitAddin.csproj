@@ -6,11 +6,11 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="NUnit" Version="3.13.3" />
-    <PackageReference Include="NUnit.Engine" Version="3.17.1" />
+    <PackageReference Include="NUnit" Version="4.3.2" />
+    <PackageReference Include="NUnit.Engine" Version="3.20.1" />
     <PackageReference Include="Revit_All_Main_Versions_API_x64" Version="2025.0.0" />
-    <PackageReference Include="xunit.runner.utility" Version="2.6.0" />
-    <PackageReference Include="xunit.extensibility.execution" Version="2.6.0" />
+    <PackageReference Include="xunit.runner.utility" Version="2.9.3" />
+    <PackageReference Include="xunit.extensibility.execution" Version="2.9.3" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\RevitTestFramework\RevitTestFramework.csproj" />

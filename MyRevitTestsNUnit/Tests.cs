@@ -11,14 +11,14 @@ namespace MyRevitTestsNUnit
         [RevitNUnitTestModel("proj-guid", "model-guid")]
         public void TestWalls()
         {
-            Assert.IsNotNull(RevitModelService.CurrentDocument);
+            Assert.That(RevitModelService.CurrentDocument, Is.Not.Null);
         }
 
         [Test]
         [RevitNUnitTestModel(@"C:\\Models\\sample.rvt")]
         public void TestLocalFile()
         {
-            Assert.IsNotNull(RevitModelService.CurrentDocument);
+            Assert.That(RevitModelService.CurrentDocument, Is.Not.Null);
         }
     }
 }
