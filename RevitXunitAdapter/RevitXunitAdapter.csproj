@@ -4,14 +4,42 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <IsTestProject>false</IsTestProject>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <!-- CRITICAL: Must have .TestAdapter.dll in the name for VS Test Platform to discover it -->
+    <AssemblyName>RevitXunit.TestAdapter</AssemblyName>
+    
+    <!-- NuGet Package Properties -->
+    <PackageId>RevitXunit.TestAdapter</PackageId>
+    <PackageVersion>1.0.0</PackageVersion>
+    <Title>Revit XUnit Test Adapter</Title>
+    <Description>Test adapter for running XUnit tests in Autodesk Revit</Description>
+    <Authors>Your Name</Authors>
+    <Company>Your Company</Company>
+    <PackageTags>revit;xunit;testing;adapter</PackageTags>
+    
+    <!-- Package the adapter for NuGet -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
   </PropertyGroup>
+  
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.utility" Version="2.9.3" />
   </ItemGroup>
+  
   <ItemGroup>
     <ProjectReference Include="..\RevitAdapterCommon\RevitAdapterCommon.csproj" />
+    <ProjectReference Include="..\RevitTestFramework.Xunit\RevitTestFramework.Xunit.csproj" />
+  </ItemGroup>
+
+  <!-- Package the test adapter files correctly for NuGet -->
+  <ItemGroup>
+    <None Include="$(OutputPath)\RevitXunit.TestAdapter.dll" Pack="true" PackagePath="build\net8.0\RevitXunit.TestAdapter.dll" />
+    <None Include="$(OutputPath)\RevitAdapterCommon.dll" Pack="true" PackagePath="build\net8.0\RevitAdapterCommon.dll" />
+    <None Include="$(OutputPath)\RevitTestFramework.Xunit.*.dll" Pack="true" PackagePath="build\net8.0\" />
   </ItemGroup>
 
 </Project>

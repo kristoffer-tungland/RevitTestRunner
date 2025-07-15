@@ -4,17 +4,34 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
   </PropertyGroup>
+  
   <ItemGroup>
     <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.2">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
   </ItemGroup>
+  
   <ItemGroup>
-    <ProjectReference Include="..\RevitAddin.Xunit\RevitAddin.Xunit.csproj" />
     <ProjectReference Include="..\RevitTestFramework.Xunit\RevitTestFramework.Xunit.csproj" />
+    <ProjectReference Include="..\RevitXunitAdapter\RevitXunitAdapter.csproj" />
+  </ItemGroup>
+  
+  <!-- Copy test adapter assemblies to output -->
+  <Target Name="CopyTestAdapter" AfterTargets="Build">
+    <ItemGroup>
+      <TestAdapterFiles Include="..\RevitXunitAdapter\bin\$(Configuration)\net8.0\RevitXunit.TestAdapter.dll" />
+      <TestAdapterFiles Include="..\RevitAdapterCommon\bin\$(Configuration)\net8.0\RevitAdapterCommon.dll" />
+      <TestAdapterFiles Include="..\RevitTestFramework.Xunit\bin\$(Configuration)\net8.0\RevitTestFramework.Xunit.*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(TestAdapterFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" ContinueOnError="true" />
+    <Message Text="Copied @(TestAdapterFiles) to $(OutDir)" Importance="high" />
+  </Target>
+  
+  <!-- Include test settings -->
+  <ItemGroup>
+    <None Include="test.runsettings">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>
