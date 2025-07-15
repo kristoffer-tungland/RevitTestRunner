@@ -1,4 +1,5 @@
 using System.Runtime.Loader;
+using System.Reflection;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using NUnit.Engine;
@@ -11,8 +12,6 @@ namespace RevitAddin.NUnit;
 public static class RevitNUnitExecutor
 {
     private static UIApplication? _uiApplication;
-    private static readonly Dictionary<string, Document> _openDocs = new();
-    private const string LocalPrefix = "local:";
 
     public static void ExecuteTestsInRevit(PipeCommand command, UIApplication uiApp, StreamWriter writer, CancellationToken cancellationToken)
     {
@@ -39,7 +38,21 @@ public static class RevitNUnitExecutor
 
         var engineAssemblyPath = typeof(TestEngineActivator).Assembly.Location;
         loadContext.LoadFromAssemblyPath(engineAssemblyPath);
-        loadContext.LoadFromAssemblyPath(testAssemblyPath);
+        var testAssembly = loadContext.LoadFromAssemblyPath(testAssemblyPath);
+
+        var attributeMap = new Dictionary<string, RevitTestFramework.NUnit.RevitNUnitTestModelAttribute>();
+        foreach (var type in testAssembly.GetTypes())
+        {
+            foreach (var method in type.GetMethods())
+            {
+                var attr = method.GetCustomAttribute<RevitTestFramework.NUnit.RevitNUnitTestModelAttribute>();
+                if (attr != null)
+                {
+                    var name = type.FullName + "." + method.Name;
+                    attributeMap[name] = attr;
+                }
+            }
+        }
 
         using var engine = TestEngineActivator.CreateInstance();
         var package = new TestPackage(testAssemblyPath);
@@ -54,7 +67,7 @@ public static class RevitNUnitExecutor
             filter = builder.GetFilter();
         }
 
-        var listener = new StreamingNUnitEventListener(writer, cancellationToken);
+        var listener = new StreamingNUnitEventListener(writer, cancellationToken, attributeMap);
         using var monitor = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _ = Task.Run(() =>
         {
@@ -80,11 +93,14 @@ internal class StreamingNUnitEventListener : ITestEventListener
 {
     private readonly StreamWriter _writer;
     private readonly CancellationToken _token;
+    private readonly Dictionary<string, RevitTestFramework.NUnit.RevitNUnitTestModelAttribute> _attrMap;
 
-    public StreamingNUnitEventListener(StreamWriter writer, CancellationToken token)
+    public StreamingNUnitEventListener(StreamWriter writer, CancellationToken token,
+        Dictionary<string, RevitTestFramework.NUnit.RevitNUnitTestModelAttribute> attrMap)
     {
         _writer = writer;
         _token = token;
+        _attrMap = attrMap;
     }
 
     public void OnTestEvent(string report)
@@ -94,7 +110,21 @@ internal class StreamingNUnitEventListener : ITestEventListener
         try
         {
             var xml = System.Xml.Linq.XElement.Parse(report);
-            if (xml.Name == "test-case")
+            if (xml.Name == "start-test")
+            {
+                var name = xml.Attribute("fullname")?.Value ?? xml.Attribute("name")?.Value ?? string.Empty;
+                if (_attrMap.TryGetValue(name, out var attr))
+                {
+                    RevitTestModelHelper.EnsureModelAndStartGroup(
+                        attr.LocalPath,
+                        attr.ProjectGuid,
+                        attr.ModelGuid,
+                        RevitModelService.OpenLocalModel!,
+                        RevitModelService.OpenCloudModel!,
+                        name);
+                }
+            }
+            else if (xml.Name == "test-case")
             {
                 var msg = new PipeTestResultMessage
                 {
@@ -111,6 +141,7 @@ internal class StreamingNUnitEventListener : ITestEventListener
                 var json = JsonSerializer.Serialize(msg);
                 _writer.WriteLine(json);
                 _writer.Flush();
+                RevitTestModelHelper.RollBackTransactionGroup();
             }
         }
         catch { }
