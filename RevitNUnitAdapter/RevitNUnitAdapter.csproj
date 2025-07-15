@@ -4,6 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <IsTestProject>false</IsTestProject>
     <!-- CRITICAL: Must have .TestAdapter.dll in the name for VS Test Platform to discover it -->
     <AssemblyName>RevitNUnit.TestAdapter</AssemblyName>
   </PropertyGroup>
