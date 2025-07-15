@@ -1,7 +1,6 @@
 using Xunit;
 using RevitTestFramework.Xunit;
 using Autodesk.Revit.DB;
-using RevitTestFramework.Common;
 
 namespace MyRevitTestsXunit;
 

@@ -22,19 +22,22 @@
     <!-- Default target framework is net8.0 -->
     <TargetFramework>net8.0</TargetFramework>
     
-    <!-- Set AssemblyName to ProjectName.Version -->
+    <!-- Set ProjectName if not set -->
     <ProjectName Condition="'$(ProjectName)' == ''">$(MSBuildProjectName)</ProjectName>
-    <AssemblyName>$(ProjectName).$(RevitVersion).$(Version)</AssemblyName>
   </PropertyGroup>
   
   <!-- Properties specific to Revit addin projects -->
   <PropertyGroup Condition="'$(IsRevitFrameworkProject)' == 'true' AND $(MSBuildProjectName.StartsWith('RevitAddin.'))">
     <PlatformTarget>x64</PlatformTarget>
+    <IsTestProject>false</IsTestProject>
+    <!-- Set AssemblyName to ProjectName.Version only for RevitAddin projects -->
+    <AssemblyName>$(ProjectName).$(RevitVersion).$(Version)</AssemblyName>
   </PropertyGroup>
   
   <!-- Properties for test framework projects -->
   <PropertyGroup Condition="'$(IsRevitFrameworkProject)' == 'true' AND $(MSBuildProjectName.StartsWith('RevitTestFramework.'))">
     <IsTestProject>false</IsTestProject>
+    <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
 
   <!-- Properties for adapter projects and related that target .NET 9 -->
