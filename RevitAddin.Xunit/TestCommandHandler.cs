@@ -3,6 +3,7 @@ using System.Runtime.Loader;
 using System.Reflection;
 using Autodesk.Revit.UI;
 using RevitAddin.Common;
+using RevitTestFramework.Common;
 
 namespace RevitAddin.Xunit;
 
@@ -11,6 +12,12 @@ public class TestCommandHandler : ITestCommandHandler
     private PipeCommand? _command;
     private NamedPipeServerStream? _pipe;
     private TaskCompletionSource? _tcs;
+    private readonly ModelOpeningExternalEvent _modelOpener;
+
+    public TestCommandHandler(ModelOpeningExternalEvent modelOpener)
+    {
+        _modelOpener = modelOpener ?? throw new ArgumentNullException(nameof(modelOpener));
+    }
 
     public void SetContext(PipeCommand command, NamedPipeServerStream pipe, TaskCompletionSource tcs)
     {
@@ -23,6 +30,9 @@ public class TestCommandHandler : ITestCommandHandler
     {
         if (_command == null || _pipe == null || _tcs == null)
             return;
+
+        // Initialize the model utility with the UI application and pre-created model opener
+        RevitModelUtility.Initialize(app, _modelOpener);
 
         using var writer = new StreamWriter(_pipe, leaveOpen: true);
 
@@ -49,7 +59,7 @@ public class TestCommandHandler : ITestCommandHandler
         _tcs.SetResult();
     }
 
-    private static void ExecuteTestsInIsolatedContext(PipeCommand command, UIApplication app, StreamWriter writer, CancellationToken cancellationToken)
+    private void ExecuteTestsInIsolatedContext(PipeCommand command, UIApplication app, StreamWriter writer, CancellationToken cancellationToken)
     {
         // Create a temporary directory for this test run to avoid file locking issues
         string tempTestDir = Path.Combine(Path.GetTempPath(), "RevitXunitTests", Guid.NewGuid().ToString("N"));
@@ -79,7 +89,7 @@ public class TestCommandHandler : ITestCommandHandler
             var commandJson = System.Text.Json.JsonSerializer.Serialize(command);
 
             // Create parameters for the method call
-            // Note: We pass primitive types and types from the default context that are safe to cross boundaries
+            // Note: We pass only primitive types and types from the default context that are safe to cross boundaries
             var parameters = new object[]
             {
                 commandJson, // Serialized PipeCommand as JSON string
@@ -87,6 +97,7 @@ public class TestCommandHandler : ITestCommandHandler
                 app, // UIApplication is from Revit API (default context)
                 writer, // StreamWriter is from System.IO (default context) 
                 cancellationToken // CancellationToken is a value type
+                // Remove _modelOpener to avoid cross-ALC type conversion issues
             };
 
             // Invoke the method in the custom ALC - now it can use xUnit directly!

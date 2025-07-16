@@ -28,23 +28,27 @@ public class RevitXunitTestCaseRunner : XunitTestCaseRunner
 
     protected override async Task<RunSummary> RunTestAsync()
     {
-        var methodName = TestCase.TestMethod.Method.Name;
-        _document = RevitTestModelHelper.EnsureModelAndStartGroup(
-            _localPath,
-            _projectGuid,
-            _modelGuid,
-            RevitModelService.OpenLocalModel!,
-            RevitModelService.OpenCloudModel!,
-            methodName);
-        try
+        // Use AsyncUtil.RunSync to avoid Revit freezing on async/await
+        return AsyncUtil.RunSync(() =>
         {
-            return await base.RunTestAsync();
-        }
-        finally
-        {
-            RevitTestModelHelper.RollBackTransactionGroup();
-            _document = null;
-        }
+            var methodName = TestCase.TestMethod.Method.Name;
+            _document = RevitTestModelHelper.EnsureModelAndStartGroup(
+                _localPath,
+                _projectGuid,
+                _modelGuid,
+                RevitModelService.OpenLocalModel!,
+                RevitModelService.OpenCloudModel!,
+                methodName);
+            try
+            {
+                return base.RunTestAsync();
+            }
+            finally
+            {
+                RevitTestModelHelper.RollBackTransactionGroup();
+                _document = null;
+            }
+        });
     }
 
     protected override XunitTestRunner CreateTestRunner(

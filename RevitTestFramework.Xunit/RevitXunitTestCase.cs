@@ -1,5 +1,6 @@
 using Xunit.Abstractions;
 using Xunit.Sdk;
+using RevitTestFramework.Common;
 
 namespace RevitTestFramework.Xunit;
 
@@ -31,10 +32,14 @@ public class RevitXunitTestCase : XunitTestCase
                                                     ExceptionAggregator aggregator,
                                                     CancellationTokenSource cancellationTokenSource)
     {
-        var runner = new RevitXunitTestCaseRunner(this, DisplayName, SkipReason,
-            constructorArguments, messageBus, aggregator,
-            cancellationTokenSource, _projectGuid, _modelGuid, _localPath);
-        return await runner.RunAsync();
+        // Use AsyncUtil.RunSync to avoid Revit freezing on async/await
+        return AsyncUtil.RunSync(() =>
+        {
+            var runner = new RevitXunitTestCaseRunner(this, DisplayName, SkipReason,
+                constructorArguments, messageBus, aggregator,
+                cancellationTokenSource, _projectGuid, _modelGuid, _localPath);
+            return runner.RunAsync();
+        });
     }
 
     public override void Serialize(IXunitSerializationInfo data)

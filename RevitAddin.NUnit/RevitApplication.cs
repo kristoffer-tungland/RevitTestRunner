@@ -1,5 +1,6 @@
 using Autodesk.Revit.UI;
 using RevitAddin.Common;
+using RevitTestFramework.Common;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -10,6 +11,7 @@ namespace RevitAddin.NUnit;
 public class RevitApplication : IExternalApplication
 {
     private PipeServer? _server;
+    private ModelOpeningExternalEvent? _modelOpener;
 
     public Result OnStartup(UIControlledApplication application)
     {
@@ -20,7 +22,10 @@ public class RevitApplication : IExternalApplication
         string addinLocation = Assembly.GetExecutingAssembly().Location;
         Trace.WriteLine($"RevitAddin.NUnit starting from: {addinLocation}");
         
-        var handler = new TestCommandHandler();
+        // Create the model opening external event during startup (when we're in standard API execution context)
+        _modelOpener = new ModelOpeningExternalEvent();
+        
+        var handler = new TestCommandHandler(_modelOpener);
         var extEvent = ExternalEvent.Create(handler);
         var pipeName = PipeConstants.PipeNamePrefix + Process.GetCurrentProcess().Id;
         _server = new PipeServer(pipeName, extEvent, handler);
@@ -34,6 +39,7 @@ public class RevitApplication : IExternalApplication
         AppDomain.CurrentDomain.AssemblyResolve -= CurrentDomain_AssemblyResolve;
         
         _server?.Dispose();
+        _modelOpener?.Dispose();
         return Result.Succeeded;
     }
     

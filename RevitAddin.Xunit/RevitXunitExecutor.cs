@@ -14,23 +14,39 @@ public static class RevitXunitExecutor
     public static void ExecuteTestsInRevit(string commandJson, string testAssemblyPath, UIApplication uiApp, StreamWriter writer, CancellationToken cancellationToken)
     {
         // Deserialize the command in the isolated context to avoid cross-ALC type issues
-        var command = JsonSerializer.Deserialize<PipeCommand>(commandJson) 
+        var command = JsonSerializer.Deserialize<PipeCommand>(commandJson)
             ?? throw new InvalidOperationException("Failed to deserialize PipeCommand");
 
-        // Set up model service with our local handlers
-        RevitModelService.OpenLocalModel = localPath => RevitModelUtility.EnsureModelOpen(uiApp, localPath);
-        RevitModelService.OpenCloudModel = (projectGuid, modelGuid) => RevitModelUtility.EnsureModelOpen(uiApp, projectGuid, modelGuid);
-        RevitModelService.CancellationToken = cancellationToken;
-        
-        var methods = command.TestMethods;
-
+        // Create a new ModelOpeningExternalEvent in this ALC context
+        // Since this method is called from TestCommandHandler.Execute (UI thread), 
+        // we should still be in a valid API execution context
+        ModelOpeningExternalEvent? modelOpener = null;
         try
         {
+            modelOpener = new ModelOpeningExternalEvent();
+            
+            // Initialize the RevitModelUtility in this ALC with the new model opener
+            RevitModelUtility.Initialize(uiApp, modelOpener);
+
+            // Set up model service with our local handlers
+            RevitModelService.OpenLocalModel = localPath => RevitModelUtility.EnsureModelOpen(uiApp, localPath);
+            RevitModelService.OpenCloudModel = (projectGuid, modelGuid) => RevitModelUtility.EnsureModelOpen(uiApp, projectGuid, modelGuid);
+            RevitModelService.CancellationToken = cancellationToken;
+
+            var methods = command.TestMethods;
+
             // Now we can use xUnit directly since we're running in the isolated ALC!
             var assemblyElement = new XElement("assembly");
-            using var controller = new XunitFrontController(AppDomainSupport.Denied, testAssemblyPath);
+            using var controller = new XunitFrontController(AppDomainSupport.Denied, testAssemblyPath, shadowCopy: false);
             var discoveryOptions = TestFrameworkOptions.ForDiscovery();
-            var executionOptions = TestFrameworkOptions.ForExecution();
+            
+            var configuration = new TestAssemblyConfiguration
+            {
+                ParallelizeAssembly = false,
+                ParallelizeTestCollections = false,
+            };
+
+            var executionOptions = TestFrameworkOptions.ForExecution(configuration);
 
             List<ITestCase> testCases;
             var discoverySink = new TestDiscoverySink();
@@ -57,11 +73,16 @@ public static class RevitXunitExecutor
         }
         catch (Exception ex)
         {
-            HandleTestExecutionException(ex, methods, writer);
+            HandleTestExecutionException(ex, command.TestMethods, writer);
         }
         finally
         {
             RevitModelService.CancellationToken = CancellationToken.None;
+            // Clean up the RevitModelUtility state
+            RevitModelUtility.CleanupOpenDocuments();
+            
+            // Dispose of the model opener created in this context
+            modelOpener?.Dispose();
         }
     }
 
