@@ -31,9 +31,6 @@ public class TestCommandHandler : ITestCommandHandler
         if (_command == null || _pipe == null || _tcs == null)
             return;
 
-        // Initialize the model utility with the UI application and pre-created model opener
-        RevitModelUtility.Initialize(app, _modelOpener);
-
         using var writer = new StreamWriter(_pipe, leaveOpen: true);
 
         using var cancelClient = new NamedPipeClientStream(".", _command.CancelPipe, PipeDirection.In);
@@ -64,6 +61,7 @@ public class TestCommandHandler : ITestCommandHandler
         // Create a temporary directory for this test run to avoid file locking issues
         string tempTestDir = Path.Combine(Path.GetTempPath(), "RevitXunitTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempTestDir);
+        object? infrastructure = null;
 
         try
         {
@@ -81,15 +79,24 @@ public class TestCommandHandler : ITestCommandHandler
             var executorType = revitAddinXunitAssembly.GetType("RevitAddin.Xunit.RevitXunitExecutor") 
                 ?? throw new InvalidOperationException("Could not find RevitXunitExecutor type");
 
-            // Get the ExecuteTestsInRevit method
-            var executeMethod = executorType.GetMethod("ExecuteTestsInRevit", BindingFlags.Public | BindingFlags.Static)
-                ?? throw new InvalidOperationException("Could not find ExecuteTestsInRevit method");
+            // Get the infrastructure setup and teardown methods
+            var setupMethod = executorType.GetMethod("SetupInfrastructure", BindingFlags.Public | BindingFlags.Static)
+                ?? throw new InvalidOperationException("Could not find SetupInfrastructure method");
+            var teardownMethod = executorType.GetMethod("TeardownInfrastructure", BindingFlags.Public | BindingFlags.Static)
+                ?? throw new InvalidOperationException("Could not find TeardownInfrastructure method");
+            
+            // Get the async test execution method
+            var executeMethod = executorType.GetMethod("ExecuteTestsInRevitAsync", BindingFlags.Public | BindingFlags.Static)
+                ?? throw new InvalidOperationException("Could not find ExecuteTestsInRevitAsync method");
+
+            // IMPORTANT: Set up all ExternalEvents and infrastructure BEFORE running tests
+            // This must happen on the UI thread in the isolated ALC context
+            infrastructure = setupMethod.Invoke(null, new object[] { app });
 
             // Serialize the command to avoid cross-ALC type issues
             var commandJson = System.Text.Json.JsonSerializer.Serialize(command);
 
             // Create parameters for the method call
-            // Note: We pass only primitive types and types from the default context that are safe to cross boundaries
             var parameters = new object[]
             {
                 commandJson, // Serialized PipeCommand as JSON string
@@ -97,11 +104,11 @@ public class TestCommandHandler : ITestCommandHandler
                 app, // UIApplication is from Revit API (default context)
                 writer, // StreamWriter is from System.IO (default context) 
                 cancellationToken // CancellationToken is a value type
-                // Remove _modelOpener to avoid cross-ALC type conversion issues
             };
 
-            // Invoke the method in the custom ALC - now it can use xUnit directly!
-            executeMethod.Invoke(null, parameters);
+            // Invoke the async method and wait for it to complete
+            var task = (Task)executeMethod.Invoke(null, parameters)!;
+            task.Wait(cancellationToken);
         }
         catch (Exception ex)
         {
@@ -109,6 +116,16 @@ public class TestCommandHandler : ITestCommandHandler
         }
         finally
         {
+            // IMPORTANT: Tear down the infrastructure on the UI thread
+            if (infrastructure != null)
+            {
+                var executorType = infrastructure.GetType().Assembly.GetType("RevitAddin.Xunit.RevitXunitExecutor")
+                    ?? throw new InvalidOperationException("Could not find RevitXunitExecutor type for teardown");
+                var teardownMethod = executorType.GetMethod("TeardownInfrastructure", BindingFlags.Public | BindingFlags.Static)
+                    ?? throw new InvalidOperationException("Could not find TeardownInfrastructure method");
+                teardownMethod.Invoke(null, new object[] { infrastructure });
+            }
+
             // Clean up the temporary directory
             CleanupTempDirectory(tempTestDir);
         }

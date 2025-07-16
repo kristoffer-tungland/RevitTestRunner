@@ -15,6 +15,14 @@ public static class RevitModelUtility
     {
         _cachedUIApp = uiApp;
         _modelOpener = modelOpener;
+        
+        // Initialize the external event factory for the test framework
+        RevitTestExternalEventUtility.Initialize(handler => ExternalEvent.Create(handler));
+    }
+
+    public static ExternalEvent CreateExternalEvent(IExternalEventHandler handler)
+    {
+        return ExternalEvent.Create(handler);
     }
 
     public static Document EnsureModelOpen(UIApplication uiApplication, string projectGuid, string modelGuid)
