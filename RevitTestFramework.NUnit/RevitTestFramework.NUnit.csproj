@@ -1,9 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <!-- Common properties and version info are in Directory.Build.props -->
-  <ItemGroup>
-    <PackageReference Include="NUnit" Version="4.3.2" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\RevitTestFramework.Common\RevitTestFramework.Common.csproj" />
-  </ItemGroup>
-</Project>
