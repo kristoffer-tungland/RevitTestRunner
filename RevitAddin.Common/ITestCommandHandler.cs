@@ -5,5 +5,6 @@ namespace RevitAddin.Common;
 
 public interface ITestCommandHandler : IExternalEventHandler
 {
-    void SetContext(PipeCommand command, NamedPipeServerStream pipe, TaskCompletionSource tcs);
+    void SetContext(IXunitTestAssemblyLoadContext loaderContext);
+    object? Result { get; }
 }

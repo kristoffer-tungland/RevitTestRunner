@@ -67,7 +67,7 @@ public static class RevitXunitExecutor
         infrastructure.Dispose();
     }
 
-    public static async Task ExecuteTestsInRevitAsync(string commandJson, string testAssemblyPath, UIApplication uiApp, StreamWriter writer, CancellationToken cancellationToken)
+    public static async Task ExecuteTestsInRevitAsync(string commandJson, string testAssemblyPath, StreamWriter writer, CancellationToken cancellationToken)
     {
         // Deserialize the command in the isolated context to avoid cross-ALC type issues
         var command = JsonSerializer.Deserialize<PipeCommand>(commandJson)
@@ -123,16 +123,6 @@ public static class RevitXunitExecutor
                 HandleTestExecutionException(ex, command.TestMethods, writer);
             }
         }, cancellationToken);
-    }
-
-    // Keep the synchronous version for backward compatibility, but implement it properly
-    public static void ExecuteTestsInRevit(string commandJson, string testAssemblyPath, UIApplication uiApp, StreamWriter writer, CancellationToken cancellationToken)
-    {
-        // This method is now more complex because setup must happen on the UI thread first.
-        // The TestCommandHandler should be updated to call Setup, then ExecuteAsync, then Teardown.
-        // This synchronous wrapper is now problematic and should ideally be removed.
-        // For now, we assume the caller handles the setup/teardown.
-        AsyncUtil.RunSync(() => ExecuteTestsInRevitAsync(commandJson, testAssemblyPath, uiApp, writer, cancellationToken));
     }
 
     private static void HandleTestExecutionException(Exception ex, string[]? methods, StreamWriter writer)
