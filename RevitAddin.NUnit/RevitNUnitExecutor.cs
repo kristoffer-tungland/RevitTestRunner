@@ -1,11 +1,12 @@
-using System.Reflection;
-using System.Runtime.Loader;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using NUnit.Engine;
-using System.Text.Json;
 using RevitAddin.Common;
 using RevitTestFramework.Common;
+using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.Loader;
+using System.Text.Json;
 
 namespace RevitAddin.NUnit;
 
@@ -117,6 +118,9 @@ internal class StreamingNUnitEventListener : ITestEventListener
     private readonly CancellationToken _token;
     private readonly Dictionary<string, RevitTestFramework.NUnit.RevitNUnitTestModelAttribute> _attrMap;
 
+    private Document? _document;
+    private TransactionGroup? _transactionGroup;
+
     public StreamingNUnitEventListener(StreamWriter writer, CancellationToken token,
         Dictionary<string, RevitTestFramework.NUnit.RevitNUnitTestModelAttribute> attrMap)
     {
@@ -125,64 +129,133 @@ internal class StreamingNUnitEventListener : ITestEventListener
         _attrMap = attrMap;
     }
 
-    private static Document OpenLocalModel(string path)
-    {
-        var doc = AsyncUtil.RunSync(() => RevitTestInfrastructure.RevitTask.Run(app =>
-            RevitTestModelHelper.OpenModel(app, path, null, null)));
-        RevitModelService.CurrentDocument = doc;
-        return doc;
-    }
-
-    private static Document OpenCloudModel(string projectGuid, string modelGuid)
-    {
-        var doc = AsyncUtil.RunSync(() => RevitTestInfrastructure.RevitTask.Run(app =>
-            RevitTestModelHelper.OpenModel(app, null, projectGuid, modelGuid)));
-        RevitModelService.CurrentDocument = doc;
-        return doc;
-    }
-
     public void OnTestEvent(string report)
     {
         if (_token.IsCancellationRequested)
             return;
+
+        // Run the event processing on a background thread to avoid blocking NUnit
+        _ = Task.Run(async () => await ProcessTestEventAsync(report), _token);
+    }
+
+    private async Task ProcessTestEventAsync(string report)
+    {
+        if (_token.IsCancellationRequested)
+            return;
+
         try
         {
             var xml = System.Xml.Linq.XElement.Parse(report);
+            
             if (xml.Name == "start-test")
             {
-                var name = xml.Attribute("fullname")?.Value ?? xml.Attribute("name")?.Value ?? string.Empty;
-                if (_attrMap.TryGetValue(name, out var attr))
-                {
-                    RevitTestModelHelper.EnsureModelAndStartGroup(
-                        attr.LocalPath,
-                        attr.ProjectGuid,
-                        attr.ModelGuid,
-                        OpenLocalModel,
-                        OpenCloudModel,
-                        name);
-                }
+                await HandleTestStartAsync(xml);
             }
             else if (xml.Name == "test-case")
             {
-                var msg = new PipeTestResultMessage
-                {
-                    Name = xml.Attribute("fullname")?.Value ?? xml.Attribute("name")?.Value ?? string.Empty,
-                    Outcome = xml.Attribute("result")?.Value ?? string.Empty,
-                    Duration = double.TryParse(xml.Attribute("duration")?.Value, out var d) ? d : 0,
-                };
-                if (msg.Outcome == "Failed")
-                {
-                    var failure = xml.Element("failure");
-                    msg.ErrorMessage = failure?.Element("message")?.Value;
-                    msg.ErrorStackTrace = failure?.Element("stack-trace")?.Value;
-                }
-                var json = JsonSerializer.Serialize(msg);
-                _writer.WriteLine(json);
-                _writer.Flush();
-                RevitTestModelHelper.RollBackTransactionGroup();
-                RevitModelService.CurrentDocument = null;
+                await HandleTestCaseAsync(xml);
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // Log the exception but don't let it escape to avoid breaking the test runner
+            Debug.WriteLine($"Error processing test event: {ex.Message}");
+        }
+    }
+
+    private async Task HandleTestStartAsync(System.Xml.Linq.XElement xml)
+    {
+        var name = xml.Attribute("fullname")?.Value ?? xml.Attribute("name")?.Value ?? string.Empty;
+        
+        if (_attrMap.TryGetValue(name, out var attr))
+        {
+            try
+            {
+                // Request model setup on UI thread and wait for completion
+                _document = await RevitTestInfrastructure.RevitTask.Run(app =>
+                {
+                    return RevitTestModelHelper.OpenModel(app, attr.LocalPath, attr.ProjectGuid, attr.ModelGuid);
+                });
+
+                // Set the current document in RevitModelService so it can be injected into tests
+                RevitModelService.CurrentDocument = _document;
+
+                // Start a transaction group for the test on UI thread
+                _transactionGroup = await RevitTestInfrastructure.RevitTask.Run(app =>
+                {
+                    var tg = new TransactionGroup(_document, $"Test: {name}");
+                    tg.Start();
+                    return tg;
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error setting up test model for {name}: {ex.Message}");
+                // Clean up any partial state
+                await CleanupResourcesAsync();
+            }
+        }
+    }
+
+    private async Task HandleTestCaseAsync(System.Xml.Linq.XElement xml)
+    {
+        var msg = new PipeTestResultMessage
+        {
+            Name = xml.Attribute("fullname")?.Value ?? xml.Attribute("name")?.Value ?? string.Empty,
+            Outcome = xml.Attribute("result")?.Value ?? string.Empty,
+            Duration = double.TryParse(xml.Attribute("duration")?.Value, out var d) ? d : 0,
+        };
+
+        if (msg.Outcome == "Failed")
+        {
+            var failure = xml.Element("failure");
+            msg.ErrorMessage = failure?.Element("message")?.Value;
+            msg.ErrorStackTrace = failure?.Element("stack-trace")?.Value;
+        }
+
+        // Write the test result
+        var json = JsonSerializer.Serialize(msg);
+        _writer.WriteLine(json);
+        _writer.Flush();
+
+        // Clean up transaction group on UI thread
+        await CleanupResourcesAsync();
+    }
+
+    private async Task CleanupResourcesAsync()
+    {
+        if (_transactionGroup != null)
+        {
+            try
+            {
+                await RevitTestInfrastructure.RevitTask.Run(app =>
+                {
+                    try
+                    {
+                        // Rollback the transaction group
+                        _transactionGroup.RollBack();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Error rolling back transaction group: {ex.Message}");
+                    }
+                    finally
+                    {
+                        _transactionGroup.Dispose();
+                        _transactionGroup = null;
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error during transaction group cleanup: {ex.Message}");
+                // Ensure we clean up the reference even if the operation failed
+                _transactionGroup = null;
+            }
+        }
+
+        // Reset document reference (this doesn't need UI thread access)
+        _document = null;
+        RevitModelService.CurrentDocument = null;
     }
 }

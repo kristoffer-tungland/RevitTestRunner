@@ -1,9 +1,8 @@
 using NUnit.Framework;
 using NUnit.Framework.Interfaces;
-using RevitTestFramework.Common;
 using NUnit.Framework.Internal;
 using NUnit.Framework.Internal.Commands;
-using NUnit.Framework.Internal.Builders;
+using RevitTestFramework.Common;
 using System.Threading.Tasks;
 using System.Threading;
 using System.Runtime.CompilerServices;
@@ -56,6 +55,7 @@ public class RevitNUnitTestModelAttribute : NUnitAttribute, IApplyToTest, IWrapT
             var testMethod = context.CurrentTest as global::NUnit.Framework.Internal.TestMethod;
             var args = testMethod!.Arguments;
 
+            // Get the document from RevitModelService instead of managing it here
             if (RevitModelService.CurrentDocument != null)
             {
                 var newArgs = new object[args.Length + 1];

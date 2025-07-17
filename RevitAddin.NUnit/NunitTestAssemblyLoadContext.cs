@@ -8,7 +8,7 @@ namespace RevitAddin.NUnit;
 /// <summary>
 /// Custom AssemblyLoadContext for loading NUnit tests in isolation
 /// </summary>
-internal class NunitTestAssemblyLoadContext : AssemblyLoadContext, IXunitTestAssemblyLoadContext
+internal class NunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssemblyLoadContext
 {
     public string TestDirectory { get; }
     private readonly string _revitAddinDirectory;
