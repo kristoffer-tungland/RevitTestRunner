@@ -1,34 +1,33 @@
 using Autodesk.Revit.UI;
 using System.IO.Pipes;
 using System.Threading;
+using RevitTestFramework.Common;
 
 namespace RevitAddin.Common;
 
 /// <summary>
-/// Handles PipeCommand execution by coordinating between the command, server, task completion, and external event
+/// Handles PipeCommand execution by coordinating between the command, server, task completion, and RevitTask
 /// </summary>
 public class PipeCommandHandler
 {
     private readonly PipeCommand _command;
     private readonly NamedPipeServerStream _server;
-    private readonly ExternalEvent _externalEvent;
+    private readonly RevitTask _revitTask;
     private readonly string _testAssemblyPath;
     private readonly Func<string, IXunitTestAssemblyLoadContext> _createLoadContext;
-    private readonly ITestCommandHandler _handler;
 
-    public PipeCommandHandler(PipeCommand command, NamedPipeServerStream server, ExternalEvent externalEvent, string testAssemblyPath,
-        Func<string, IXunitTestAssemblyLoadContext> createLoadContext, ITestCommandHandler handler)
+    public PipeCommandHandler(PipeCommand command, NamedPipeServerStream server, RevitTask revitTask, string testAssemblyPath,
+        Func<string, IXunitTestAssemblyLoadContext> createLoadContext)
     {
         _command = command ?? throw new ArgumentNullException(nameof(command));
         _server = server ?? throw new ArgumentNullException(nameof(server));
-        _externalEvent = externalEvent ?? throw new ArgumentNullException(nameof(externalEvent));
+        _revitTask = revitTask ?? throw new ArgumentNullException(nameof(revitTask));
         _testAssemblyPath = testAssemblyPath ?? throw new ArgumentNullException(nameof(testAssemblyPath));
         _createLoadContext = createLoadContext ?? throw new ArgumentNullException(nameof(createLoadContext));
-        _handler = handler ?? throw new ArgumentNullException(nameof(handler));
     }
 
     /// <summary>
-    /// Executes the pipe command by raising the external event and waiting for completion
+    /// Executes the pipe command by running the handler on the Revit UI thread and waiting for completion
     /// </summary>
     /// <returns>A task that completes when the command execution is finished</returns>
     public async Task ExecuteAsync()
@@ -58,9 +57,7 @@ public class PipeCommandHandler
 
         try
         {
-            _handler.SetContext(loadContext);
-            _externalEvent.Raise();
-            infrastructure = _handler.Result;
+            infrastructure = await _revitTask.Run(app => loadContext.SetupInfrastructure(app));
 
             await loadContext.ExecuteTestsAsync(_command, _testAssemblyPath, writer, cts.Token);
         }
@@ -89,9 +86,9 @@ public class PipeCommandHandler
     public NamedPipeServerStream Server => _server;
 
     /// <summary>
-    /// Gets the external event associated with this handler
+    /// Gets the RevitTask associated with this handler
     /// </summary>
-    public ExternalEvent ExternalEvent => _externalEvent;
+    public RevitTask RevitTask => _revitTask;
 
     private static void HandleTestExecutionException(Exception ex, string[]? methods, StreamWriter writer)
     {

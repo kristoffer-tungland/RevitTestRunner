@@ -1,23 +1,22 @@
 using System.IO.Pipes;
 using System.Text.Json;
 using Autodesk.Revit.UI;
+using RevitTestFramework.Common;
 
 namespace RevitAddin.Common;
 
 public class PipeServer : IDisposable
 {
     private readonly string _pipeName;
-    private readonly ExternalEvent _externalEvent;
-    private readonly ITestCommandHandler _handler;
+    private readonly RevitTask _revitTask;
     private readonly Func<string, IXunitTestAssemblyLoadContext> _createLoadContext;
     private readonly CancellationTokenSource _cts = new();
     private Task? _listenerTask;
 
-    public PipeServer(string pipeName, ExternalEvent externalEvent, ITestCommandHandler handler, Func<string, IXunitTestAssemblyLoadContext> createLoadContext)
+    public PipeServer(string pipeName, RevitTask revitTask, Func<string, IXunitTestAssemblyLoadContext> createLoadContext)
     {
         _pipeName = pipeName;
-        _externalEvent = externalEvent;
-        _handler = handler;
+        _revitTask = revitTask;
         _createLoadContext = createLoadContext ?? throw new ArgumentNullException(nameof(createLoadContext));
     }
 
@@ -74,7 +73,7 @@ public class PipeServer : IDisposable
                 var testAssemblyPath = CopyTestAssemblyWithDependencies(command.TestAssembly, tempTestDir);
 
                 // Create the PipeCommandHandler with all dependencies
-                var commandHandler = new PipeCommandHandler(command, server, _externalEvent, testAssemblyPath, _createLoadContext, _handler);
+                var commandHandler = new PipeCommandHandler(command, server, _revitTask, testAssemblyPath, _createLoadContext);
 
                 // Execute the command through the handler
                 await commandHandler.ExecuteAsync().ConfigureAwait(false);

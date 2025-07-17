@@ -11,6 +11,7 @@ namespace RevitAddin.Xunit;
 public class RevitApplication : IExternalApplication
 {
     private PipeServer? _server;
+    private RevitTask? _revitTask;
 
     public Result OnStartup(UIControlledApplication application)
     {
@@ -24,11 +25,10 @@ public class RevitApplication : IExternalApplication
         string addinLocation = Assembly.GetExecutingAssembly().Location;
         Trace.WriteLine($"RevitAddin.Xunit starting from: {addinLocation}");
 
-        
-        var handler = new TestCommandHandler();
-        var extEvent = ExternalEvent.Create(handler);
+        // Use RevitTask to manage UI thread execution
+        _revitTask = new RevitTask();
         var pipeName = PipeConstants.PipeNamePrefix + Process.GetCurrentProcess().Id;
-        _server = new PipeServer(pipeName, extEvent, handler, path => new XunitTestAssemblyLoadContext(path));
+        _server = new PipeServer(pipeName, _revitTask, path => new XunitTestAssemblyLoadContext(path));
         _server.Start();
         return Result.Succeeded;
     }
@@ -39,6 +39,7 @@ public class RevitApplication : IExternalApplication
         AppDomain.CurrentDomain.AssemblyResolve -= CurrentDomain_AssemblyResolve;
 
         _server?.Dispose();
+        _revitTask?.Dispose();
         return Result.Succeeded;
     }
 
