@@ -60,7 +60,7 @@ public class PipeServer : IDisposable
     /// </summary>
     private async Task ProcessCommandAsync(PipeCommand command, NamedPipeServerStream server)
     {
-        if (command.Command == "RunXunitTests")
+        if (command.Command == "RunXunitTests" || command.Command == "RunNUnitTests")
         {
 
             // Create a temporary directory for this test run to avoid file locking issues
