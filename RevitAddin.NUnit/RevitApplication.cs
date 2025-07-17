@@ -11,7 +11,7 @@ namespace RevitAddin.NUnit;
 public class RevitApplication : IExternalApplication
 {
     private PipeServer? _server;
-    private ModelOpeningExternalEvent? _modelOpener;
+    private RevitTask? _revitTask;
 
     public Result OnStartup(UIControlledApplication application)
     {
@@ -22,13 +22,9 @@ public class RevitApplication : IExternalApplication
         string addinLocation = Assembly.GetExecutingAssembly().Location;
         Trace.WriteLine($"RevitAddin.NUnit starting from: {addinLocation}");
         
-        // Create the model opening external event during startup (when we're in standard API execution context)
-        _modelOpener = new ModelOpeningExternalEvent();
-        
-        var handler = new TestCommandHandler(_modelOpener);
-        var extEvent = ExternalEvent.Create(handler);
+        _revitTask = new RevitTask();
         var pipeName = PipeConstants.PipeNamePrefix + Process.GetCurrentProcess().Id;
-        _server = new PipeServer(pipeName, extEvent, handler);
+        _server = new PipeServer(pipeName, _revitTask, path => new NunitTestAssemblyLoadContext(path));
         _server.Start();
         return Result.Succeeded;
     }
@@ -39,7 +35,7 @@ public class RevitApplication : IExternalApplication
         AppDomain.CurrentDomain.AssemblyResolve -= CurrentDomain_AssemblyResolve;
         
         _server?.Dispose();
-        _modelOpener?.Dispose();
+        _revitTask?.Dispose();
         return Result.Succeeded;
     }
     
