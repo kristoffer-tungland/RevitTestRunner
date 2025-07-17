@@ -1,6 +1,4 @@
-using Autodesk.Revit.UI;
 using System.IO.Pipes;
-using System.Threading;
 using RevitTestFramework.Common;
 
 namespace RevitAddin.Common;
@@ -8,23 +6,14 @@ namespace RevitAddin.Common;
 /// <summary>
 /// Handles PipeCommand execution by coordinating between the command, server, task completion, and RevitTask
 /// </summary>
-public class PipeCommandHandler
+public class PipeCommandHandler(PipeCommand command, NamedPipeServerStream server, RevitTask revitTask, string testAssemblyPath,
+    Func<string, ITestAssemblyLoadContext> createLoadContext)
 {
-    private readonly PipeCommand _command;
-    private readonly NamedPipeServerStream _server;
-    private readonly RevitTask _revitTask;
-    private readonly string _testAssemblyPath;
-    private readonly Func<string, ITestAssemblyLoadContext> _createLoadContext;
-
-    public PipeCommandHandler(PipeCommand command, NamedPipeServerStream server, RevitTask revitTask, string testAssemblyPath,
-        Func<string, ITestAssemblyLoadContext> createLoadContext)
-    {
-        _command = command ?? throw new ArgumentNullException(nameof(command));
-        _server = server ?? throw new ArgumentNullException(nameof(server));
-        _revitTask = revitTask ?? throw new ArgumentNullException(nameof(revitTask));
-        _testAssemblyPath = testAssemblyPath ?? throw new ArgumentNullException(nameof(testAssemblyPath));
-        _createLoadContext = createLoadContext ?? throw new ArgumentNullException(nameof(createLoadContext));
-    }
+    private readonly PipeCommand _command = command ?? throw new ArgumentNullException(nameof(command));
+    private readonly NamedPipeServerStream _server = server ?? throw new ArgumentNullException(nameof(server));
+    private readonly RevitTask _revitTask = revitTask ?? throw new ArgumentNullException(nameof(revitTask));
+    private readonly string _testAssemblyPath = testAssemblyPath ?? throw new ArgumentNullException(nameof(testAssemblyPath));
+    private readonly Func<string, ITestAssemblyLoadContext> _createLoadContext = createLoadContext ?? throw new ArgumentNullException(nameof(createLoadContext));
 
     /// <summary>
     /// Executes the pipe command by running the handler on the Revit UI thread and waiting for completion

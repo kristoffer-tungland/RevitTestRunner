@@ -1,9 +1,7 @@
 using Autodesk.Revit.UI;
 using RevitAddin.Common;
 using RevitTestFramework.Common;
-using System;
 using System.Diagnostics;
-using System.IO;
 using System.Reflection;
 
 namespace RevitAddin.Xunit;
@@ -29,7 +27,7 @@ public class RevitApplication : IExternalApplication
 
             // Use RevitTask to manage UI thread execution
             _revitTask = new RevitTask();
-            var pipeName = PipeConstants.PipeNamePrefix + Process.GetCurrentProcess().Id;
+            var pipeName = PipeConstants.PipeNamePrefix + Environment.ProcessId;
             _server = new PipeServer(pipeName, _revitTask, path => new XunitTestAssemblyLoadContext(path));
             _server.Start();
             

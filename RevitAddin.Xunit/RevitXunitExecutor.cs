@@ -2,11 +2,9 @@ using System.Xml.Linq;
 using Autodesk.Revit.UI;
 using Xunit;
 using Xunit.Abstractions;
-using Xunit.Sdk;
 using RevitAddin.Common;
 using RevitTestFramework.Common;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace RevitAddin.Xunit;
 
@@ -122,15 +120,9 @@ public static class RevitXunitExecutor
 }
 
 // Clean xUnit integration without reflection
-internal class StreamingXmlTestExecutionVisitor : XmlTestExecutionVisitor
+internal class StreamingXmlTestExecutionVisitor(StreamWriter writer, XElement assemblyElement, Func<bool> cancelThunk) : XmlTestExecutionVisitor(assemblyElement, cancelThunk)
 {
-    private readonly StreamWriter _writer;
-
-    public StreamingXmlTestExecutionVisitor(StreamWriter writer, XElement assemblyElement, Func<bool> cancelThunk)
-        : base(assemblyElement, cancelThunk)
-    {
-        _writer = writer;
-    }
+    private readonly StreamWriter _writer = writer;
 
     private void Send(PipeTestResultMessage msg)
     {
@@ -157,8 +149,8 @@ internal class StreamingXmlTestExecutionVisitor : XmlTestExecutionVisitor
             Name = testFailed.Test.DisplayName,
             Outcome = "Failed",
             Duration = (double)testFailed.ExecutionTime,
-            ErrorMessage = string.Join(Environment.NewLine, testFailed.Messages ?? Array.Empty<string>()),
-            ErrorStackTrace = string.Join(Environment.NewLine, testFailed.StackTraces ?? Array.Empty<string>())
+            ErrorMessage = string.Join(Environment.NewLine, testFailed.Messages ?? []),
+            ErrorStackTrace = string.Join(Environment.NewLine, testFailed.StackTraces ?? [])
         });
         return base.Visit(testFailed);
     }

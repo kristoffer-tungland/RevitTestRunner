@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Reflection;
 
 namespace RevitTestFramework.Common
@@ -84,7 +81,7 @@ namespace RevitTestFramework.Common
 
         private static string GetOptionOrDefault(Dictionary<string, string> options, string key, string defaultValue)
         {
-            return options.TryGetValue(key, out string value) ? value : defaultValue;
+            return options.TryGetValue(key, out string? value) ? value : defaultValue;
         }
 
         private static string GetDefaultOutputDir(string revitVersion)

@@ -1,5 +1,3 @@
-using System;
-using System.IO;
 using System.Xml;
 using System.Text.RegularExpressions;
 
@@ -8,7 +6,7 @@ namespace RevitTestFramework.Common;
 /// <summary>
 /// Generator for Revit addin manifest files
 /// </summary>
-public static class RevitAddInManifestGenerator
+public static partial class RevitAddInManifestGenerator
 {
     /// <summary>
     /// Generates a Revit addin manifest file using direct XML generation
@@ -34,7 +32,7 @@ public static class RevitAddInManifestGenerator
         
         // Extract base name without version and extension
         string baseClassName = Path.GetFileNameWithoutExtension(assemblyFileName);
-        baseClassName = Regex.Replace(baseClassName, @"\.v\d+\.\d+\.\d+", ""); // Remove version suffix if present
+        baseClassName = ManifestVersionSuffixRegex().Replace(baseClassName, ""); // Remove version suffix if present
         
         // Include version in manifest filename
         string manifestPath = Path.Combine(outputPath, $"{baseClassName}.v{version}.addin");
@@ -69,7 +67,7 @@ public static class RevitAddInManifestGenerator
 
         // Extract the proper namespace from the assembly name - remove any version components
         // First extract the base namespace (e.g., "RevitAddin.Xunit" from "RevitAddin.Xunit.2025.1.0.0")
-        string namespaceName = Regex.Replace(baseClassName, @"\.\d{4}(\.\d+\.\d+\.\d+)?", "");
+        string namespaceName = AssemblyVersionSuffixRegex().Replace(baseClassName, "");
         
         var appFullClassName = doc.CreateElement("FullClassName");
         appFullClassName.InnerText = $"{namespaceName}.{applicationClassName}";
@@ -91,4 +89,10 @@ public static class RevitAddInManifestGenerator
         
         Console.WriteLine($"Created addin manifest at {manifestPath}");
     }
+
+    [GeneratedRegex(@"\.\d{4}(\.\d+\.\d+\.\d+)?")]
+    private static partial Regex AssemblyVersionSuffixRegex();
+
+    [GeneratedRegex(@"\.v\d+\.\d+\.\d+")]
+    private static partial Regex ManifestVersionSuffixRegex();
 }

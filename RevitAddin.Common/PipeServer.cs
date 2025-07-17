@@ -1,24 +1,16 @@
 using System.IO.Pipes;
 using System.Text.Json;
-using Autodesk.Revit.UI;
 using RevitTestFramework.Common;
 
 namespace RevitAddin.Common;
 
-public class PipeServer : IDisposable
+public class PipeServer(string pipeName, RevitTask revitTask, Func<string, ITestAssemblyLoadContext> createLoadContext) : IDisposable
 {
-    private readonly string _pipeName;
-    private readonly RevitTask _revitTask;
-    private readonly Func<string, ITestAssemblyLoadContext> _createLoadContext;
+    private readonly string _pipeName = pipeName;
+    private readonly RevitTask _revitTask = revitTask;
+    private readonly Func<string, ITestAssemblyLoadContext> _createLoadContext = createLoadContext ?? throw new ArgumentNullException(nameof(createLoadContext));
     private readonly CancellationTokenSource _cts = new();
     private Task? _listenerTask;
-
-    public PipeServer(string pipeName, RevitTask revitTask, Func<string, ITestAssemblyLoadContext> createLoadContext)
-    {
-        _pipeName = pipeName;
-        _revitTask = revitTask;
-        _createLoadContext = createLoadContext ?? throw new ArgumentNullException(nameof(createLoadContext));
-    }
 
     public void Start()
     {

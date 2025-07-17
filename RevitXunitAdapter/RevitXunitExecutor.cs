@@ -46,7 +46,7 @@ namespace RevitXunitAdapter
 
                 frameworkHandle.SendMessage(TestMessageLevel.Informational, $"RevitXunitExecutor: Running all tests from {assembly}");
 
-                SendRunCommandStreaming(assembly, Array.Empty<string>(), frameworkHandle, _cts.Token);
+                SendRunCommandStreaming(assembly, [], frameworkHandle, _cts.Token);
             }
             catch (Exception ex)
             {

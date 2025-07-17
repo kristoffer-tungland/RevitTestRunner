@@ -7,26 +7,18 @@ using RevitTestFramework.Common;
 
 namespace RevitTestFramework.Xunit;
 
-public class RevitXunitTestCaseRunner : XunitTestCaseRunner
+public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayName, string skipReason,
+    object[] constructorArguments, IMessageBus messageBus,
+    ExceptionAggregator aggregator, CancellationTokenSource cancellationTokenSource,
+    string? projectGuid, string? modelGuid, string? localPath) : XunitTestCaseRunner(testCase, displayName, skipReason, constructorArguments, [],
+           messageBus, aggregator, cancellationTokenSource)
 {
-    private readonly string? _projectGuid;
-    private readonly string? _modelGuid;
-    private readonly string? _localPath;
+    private readonly string? _projectGuid = projectGuid;
+    private readonly string? _modelGuid = modelGuid;
+    private readonly string? _localPath = localPath;
 
     private Document? _document;
     private TransactionGroup? _transactionGroup;
-
-    public RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayName, string skipReason,
-        object[] constructorArguments, IMessageBus messageBus,
-        ExceptionAggregator aggregator, CancellationTokenSource cancellationTokenSource,
-        string? projectGuid, string? modelGuid, string? localPath)
-        : base(testCase, displayName, skipReason, constructorArguments, Array.Empty<object>(),
-               messageBus, aggregator, cancellationTokenSource)
-    {
-        _projectGuid = projectGuid;
-        _modelGuid = modelGuid;
-        _localPath = localPath;
-    }
 
     protected override async Task<RunSummary> RunTestAsync()
     {
@@ -110,17 +102,12 @@ public class RevitXunitTestCaseRunner : XunitTestCaseRunner
 /// <summary>
 /// Custom test runner that ensures test method execution happens on UI thread when needed
 /// </summary>
-public class RevitUITestRunner : XunitTestRunner
+public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClass, object[] constructorArguments,
+    MethodInfo testMethod, object[] testMethodArguments, string skipReason,
+    IReadOnlyList<BeforeAfterTestAttribute> beforeAfterAttributes, ExceptionAggregator aggregator,
+    CancellationTokenSource cancellationTokenSource) : XunitTestRunner(test, messageBus, testClass, constructorArguments, testMethod, testMethodArguments,
+           skipReason, beforeAfterAttributes, aggregator, cancellationTokenSource)
 {
-    public RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClass, object[] constructorArguments,
-        MethodInfo testMethod, object[] testMethodArguments, string skipReason,
-        IReadOnlyList<BeforeAfterTestAttribute> beforeAfterAttributes, ExceptionAggregator aggregator,
-        CancellationTokenSource cancellationTokenSource)
-        : base(test, messageBus, testClass, constructorArguments, testMethod, testMethodArguments,
-               skipReason, beforeAfterAttributes, aggregator, cancellationTokenSource)
-    {
-    }
-
     protected override async Task<decimal> InvokeTestMethodAsync(ExceptionAggregator aggregator)
     {        
         // Wait for completion with timeout
