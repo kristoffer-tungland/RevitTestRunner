@@ -9,7 +9,7 @@ namespace RevitAddin.Common
 
         Task ExecuteTestsAsync(PipeCommand command, string testAssemblyPath, StreamWriter writer, CancellationToken cancellationToken);
         Assembly LoadRevitAddinTestAssembly();
-        object SetupInfrastructure(UIApplication app);
-        void TeardownInfrastructure(object infrastructure);
+        void SetupInfrastructure(UIApplication app);
+        void TeardownInfrastructure();
     }
 }

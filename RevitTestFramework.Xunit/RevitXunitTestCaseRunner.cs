@@ -1,11 +1,6 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
 using Autodesk.Revit.DB;
-using Autodesk.Revit.UI;
 using Xunit.Abstractions;
 using Xunit.Sdk;
 using RevitTestFramework.Common;
@@ -17,7 +12,9 @@ public class RevitXunitTestCaseRunner : XunitTestCaseRunner
     private readonly string? _projectGuid;
     private readonly string? _modelGuid;
     private readonly string? _localPath;
+
     private Document? _document;
+    private TransactionGroup? _transactionGroup;
 
     public RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayName, string skipReason,
         object[] constructorArguments, IMessageBus messageBus,
@@ -37,21 +34,22 @@ public class RevitXunitTestCaseRunner : XunitTestCaseRunner
         return await Task.Run(async () =>
         {
             var methodName = TestCase.TestMethod.Method.Name;
-            
-            // Use ExternalEvent to set up model on UI thread
-            var modelSetupHandler = new RevitModelSetupHandler(_localPath, _projectGuid, _modelGuid, methodName);
-            var modelSetupEvent = RevitTestExternalEventUtility.CreateExternalEvent(modelSetupHandler);
-            
+                        
             try
             {
                 // Request model setup on UI thread and wait for completion
-                var setupResult = await RequestModelSetupAsync(modelSetupEvent, modelSetupHandler);
-                _document = setupResult;
-                
-                if (_document == null)
+                _document = await RevitTestInfrastructure.RevitTask.Run(app =>
                 {
-                    throw new InvalidOperationException($"Failed to set up Revit model for test: {methodName}");
-                }
+                    return RevitTestModelHelper.OpenModel(app, _localPath, _projectGuid, _modelGuid);
+                });
+
+                _transactionGroup = await RevitTestInfrastructure.RevitTask.Run(app =>
+                {
+                    // Start a transaction group for the test
+                    var tg = new TransactionGroup(_document, $"Test: {methodName}");
+                    tg.Start();
+                    return tg;
+                });
 
                 // Now run the test with the prepared document
                 return await base.RunTestAsync();
@@ -59,49 +57,28 @@ public class RevitXunitTestCaseRunner : XunitTestCaseRunner
             finally
             {
                 // Clean up on UI thread
-                var cleanupHandler = new RevitModelCleanupHandler();
-                var cleanupEvent = RevitTestExternalEventUtility.CreateExternalEvent(cleanupHandler);
-                await RequestCleanupAsync(cleanupEvent, cleanupHandler);
                 _document = null;
+                await RevitTestInfrastructure.RevitTask.Run(app =>
+                {
+                    if (_transactionGroup != null)
+                    {
+                        try
+                        {
+                            // Rollback the transaction group
+                            _transactionGroup.RollBack();
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"Error rolling back transaction group: {ex.Message}");
+                        }
+                        finally
+                        {
+                            _transactionGroup.Dispose();
+                        }
+                    }
+                });
             }
         });
-    }
-
-    private async Task<Document?> RequestModelSetupAsync(ExternalEvent externalEvent, RevitModelSetupHandler handler)
-    {
-        var tcs = new TaskCompletionSource<Document?>();
-        handler.SetCompletionSource(tcs);
-        
-        // Request execution on UI thread
-        externalEvent.Raise();
-        
-        // Wait for completion with timeout
-        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
-        cts.Token.Register(() => tcs.TrySetCanceled());
-        
-        return await tcs.Task;
-    }
-
-    private async Task RequestCleanupAsync(ExternalEvent externalEvent, RevitModelCleanupHandler handler)
-    {
-        var tcs = new TaskCompletionSource<bool>();
-        handler.SetCompletionSource(tcs);
-        
-        // Request execution on UI thread
-        externalEvent.Raise();
-        
-        // Wait for completion with timeout
-        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1));
-        cts.Token.Register(() => tcs.TrySetCanceled());
-        
-        try
-        {
-            await tcs.Task;
-        }
-        catch
-        {
-            // Ignore cleanup errors
-        }
     }
 
     protected override XunitTestRunner CreateTestRunner(
@@ -148,22 +125,15 @@ public class RevitUITestRunner : XunitTestRunner
     {
         // For Revit tests, we need to execute the actual test method on the UI thread
         var testExecutionHandler = new RevitTestExecutionHandler(TestClass, ConstructorArguments, TestMethod, TestMethodArguments);
-        var testExecutionEvent = RevitTestExternalEventUtility.CreateExternalEvent(testExecutionHandler);
-        
-        var tcs = new TaskCompletionSource<decimal>();
-        testExecutionHandler.SetCompletionSource(tcs);
-        
-        // Request execution on UI thread
-        testExecutionEvent.Raise();
         
         // Wait for completion with timeout
-        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
-        cts.Token.Register(() => tcs.TrySetCanceled());
+        //using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        //cts.Token.Register(() => tcs.TrySetCanceled());
         
         try
         {
-            var result = await tcs.Task;
-            
+            var result = await RevitTestInfrastructure.RevitTask.Run(testExecutionHandler.Execute);
+
             // If the test method threw an exception, it will be in the handler
             if (testExecutionHandler.Exception != null)
             {

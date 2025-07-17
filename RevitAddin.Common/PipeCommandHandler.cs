@@ -51,14 +51,12 @@ public class PipeCommandHandler
         }
         catch { }
 
-        object? infrastructure = null;
         var tempTestDir = Path.GetDirectoryName(_testAssemblyPath) ?? throw new InvalidOperationException("Test assembly path is invalid.");
         var loadContext = _createLoadContext(tempTestDir);
 
         try
         {
-            infrastructure = await _revitTask.Run(app => loadContext.SetupInfrastructure(app));
-
+            await _revitTask.Run(loadContext.SetupInfrastructure);
             await loadContext.ExecuteTestsAsync(_command, _testAssemblyPath, writer, cts.Token);
         }
         catch (Exception ex)
@@ -68,9 +66,9 @@ public class PipeCommandHandler
         finally
         {
             // IMPORTANT: Tear down the infrastructure on the UI thread
-            if (infrastructure != null && loadContext != null)
+            if (loadContext != null)
             {
-                loadContext.TeardownInfrastructure(infrastructure);
+                loadContext.TeardownInfrastructure();
             }
         }
     }

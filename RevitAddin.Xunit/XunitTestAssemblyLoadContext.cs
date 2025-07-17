@@ -45,7 +45,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, IXunitTestAss
     /// </summary>
     /// <param name="app">The UIApplication to pass to the setup method</param>
     /// <returns>The infrastructure object returned by SetupInfrastructure</returns>
-    public object SetupInfrastructure(UIApplication app)
+    public void SetupInfrastructure(UIApplication app)
     {
         var assembly = LoadRevitAddinTestAssembly();
         var executorType = assembly.GetType("RevitAddin.Xunit.RevitXunitExecutor")
@@ -54,23 +54,25 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, IXunitTestAss
         var setupMethod = executorType.GetMethod("SetupInfrastructure", BindingFlags.Public | BindingFlags.Static)
             ?? throw new InvalidOperationException("Could not find SetupInfrastructure method");
 
-        return setupMethod.Invoke(null, new object[] { app })
-            ?? throw new InvalidOperationException("SetupInfrastructure returned null");
+        setupMethod.Invoke(null, [app]);
     }
 
     /// <summary>
     /// Tears down the Revit test infrastructure by calling the TeardownInfrastructure method via reflection
     /// </summary>
     /// <param name="infrastructure">The infrastructure object to tear down</param>
-    public void TeardownInfrastructure(object infrastructure)
+    public void TeardownInfrastructure()
     {
-        var executorType = infrastructure.GetType().Assembly.GetType("RevitAddin.Xunit.RevitXunitExecutor")
+        if (_revitAddinXunitAssembly == null)
+            throw new InvalidOperationException("RevitAddin.Xunit assembly has not been loaded. Call LoadRevitAddinTestAssembly first.");
+
+        var executorType = _revitAddinXunitAssembly.GetType("RevitAddin.Xunit.RevitXunitExecutor")
             ?? throw new InvalidOperationException("Could not find RevitXunitExecutor type for teardown");
 
         var teardownMethod = executorType.GetMethod("TeardownInfrastructure", BindingFlags.Public | BindingFlags.Static)
             ?? throw new InvalidOperationException("Could not find TeardownInfrastructure method");
 
-        teardownMethod.Invoke(null, new object[] { infrastructure });
+        teardownMethod.Invoke(null, null);
     }
 
     /// <summary>

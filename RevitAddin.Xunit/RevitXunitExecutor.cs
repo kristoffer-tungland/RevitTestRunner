@@ -10,61 +10,25 @@ using System.Threading.Tasks;
 
 namespace RevitAddin.Xunit;
 
-/// <summary>
-/// Helper class to set up and manage Revit API infrastructure for testing.
-/// This must be created and disposed on the main Revit UI thread.
-/// </summary>
-public class RevitTestInfrastructure : IDisposable
-{
-    public ModelOpeningExternalEvent ModelOpener { get; }
-    public RevitTestExternalEventPool EventPool { get; }
-
-    public RevitTestInfrastructure(UIApplication uiApp)
-    {
-        ModelOpener = new ModelOpeningExternalEvent();
-        EventPool = new RevitTestExternalEventPool(uiApp);
-    }
-
-    public void Dispose()
-    {
-        EventPool.Dispose();
-        ModelOpener.Dispose();
-    }
-}
-
 public static class RevitXunitExecutor
 {
+
     /// <summary>
     /// Sets up the required Revit API infrastructure (ExternalEvents, etc.).
     /// This method MUST be called from the Revit UI thread.
     /// </summary>
-    public static RevitTestInfrastructure SetupInfrastructure(UIApplication uiApp)
+    public static void SetupInfrastructure(UIApplication uiApp)
     {
-        var infrastructure = new RevitTestInfrastructure(uiApp);
-        
-        // Initialize the RevitModelUtility in this ALC with the new model opener
-        RevitModelUtility.Initialize(uiApp, infrastructure.ModelOpener);
-
-        // Set up model service with our local handlers
-        RevitModelService.OpenLocalModel = localPath => RevitModelUtility.EnsureModelOpen(uiApp, localPath);
-        RevitModelService.OpenCloudModel = (projectGuid, modelGuid) => RevitModelUtility.EnsureModelOpen(uiApp, projectGuid, modelGuid);
-        
-        // Set the event pool for the test framework to use
-        RevitTestExternalEventUtility.SetEventPool(infrastructure.EventPool);
-
-        return infrastructure;
+        RevitTestInfrastructure.Setup(uiApp);
     }
 
     /// <summary>
     /// Cleans up the Revit API infrastructure after tests have run.
     /// This method MUST be called from the Revit UI thread.
     /// </summary>
-    public static void TeardownInfrastructure(RevitTestInfrastructure infrastructure)
+    public static void TeardownInfrastructure()
     {
-        RevitTestExternalEventUtility.ClearEventPool();
-        RevitModelService.CancellationToken = CancellationToken.None;
-        RevitModelUtility.CleanupOpenDocuments();
-        infrastructure.Dispose();
+        RevitTestInfrastructure.Dispose();
     }
 
     public static async Task ExecuteTestsInRevitAsync(string commandJson, string testAssemblyPath, StreamWriter writer, CancellationToken cancellationToken)
@@ -155,211 +119,6 @@ public static class RevitXunitExecutor
             System.Diagnostics.Debug.WriteLine($"RevitXunitExecutor: Original exception: {ex}");
         }
     }
-}
-
-/// <summary>
-/// Pool of pre-created ExternalEvents for use in background threads
-/// </summary>
-public class RevitTestExternalEventPool : IRevitTestExternalEventPool, IDisposable
-{
-    private readonly Queue<ExternalEvent> _modelSetupEvents = new();
-    private readonly Queue<ExternalEvent> _modelCleanupEvents = new();
-    private readonly Queue<ExternalEvent> _testExecutionEvents = new();
-    private readonly object _lock = new();
-    private bool _disposed = false;
-
-    public RevitTestExternalEventPool(UIApplication uiApp)
-    {
-        // Pre-create a pool of ExternalEvents while on UI thread
-        // Create enough events to handle concurrent test execution
-        const int poolSize = 10;
-
-        for (int i = 0; i < poolSize; i++)
-        {
-            _modelSetupEvents.Enqueue(ExternalEvent.Create(new PooledRevitModelSetupHandler()));
-            _modelCleanupEvents.Enqueue(ExternalEvent.Create(new PooledRevitModelCleanupHandler()));
-            _testExecutionEvents.Enqueue(ExternalEvent.Create(new PooledRevitTestExecutionHandler()));
-        }
-    }
-
-    public ExternalEvent GetModelSetupEvent(RevitModelSetupHandler handler)
-    {
-        lock (_lock)
-        {
-            if (_disposed) throw new ObjectDisposedException(nameof(RevitTestExternalEventPool));
-            
-            if (_modelSetupEvents.Count == 0)
-                throw new InvalidOperationException("No model setup events available in pool");
-                
-            var evt = _modelSetupEvents.Dequeue();
-            PooledRevitModelSetupHandler.SetCurrentHandler(handler);
-            return evt;
-        }
-    }
-
-    public ExternalEvent GetModelCleanupEvent(RevitModelCleanupHandler handler)
-    {
-        lock (_lock)
-        {
-            if (_disposed) throw new ObjectDisposedException(nameof(RevitTestExternalEventPool));
-            
-            if (_modelCleanupEvents.Count == 0)
-                throw new InvalidOperationException("No model cleanup events available in pool");
-                
-            var evt = _modelCleanupEvents.Dequeue();
-            PooledRevitModelCleanupHandler.SetCurrentHandler(handler);
-            return evt;
-        }
-    }
-
-    public ExternalEvent GetTestExecutionEvent(RevitTestExecutionHandler handler)
-    {
-        lock (_lock)
-        {
-            if (_disposed) throw new ObjectDisposedException(nameof(RevitTestExternalEventPool));
-            
-            if (_testExecutionEvents.Count == 0)
-                throw new InvalidOperationException("No test execution events available in pool");
-                
-            var evt = _testExecutionEvents.Dequeue();
-            PooledRevitTestExecutionHandler.SetCurrentHandler(handler);
-            return evt;
-        }
-    }
-
-    public void ReturnModelSetupEvent(ExternalEvent evt)
-    {
-        lock (_lock)
-        {
-            if (!_disposed) 
-            {
-                PooledRevitModelSetupHandler.SetCurrentHandler(null);
-                _modelSetupEvents.Enqueue(evt);
-            }
-        }
-    }
-
-    public void ReturnModelCleanupEvent(ExternalEvent evt)
-    {
-        lock (_lock)
-        {
-            if (!_disposed) 
-            {
-                PooledRevitModelCleanupHandler.SetCurrentHandler(null);
-                _modelCleanupEvents.Enqueue(evt);
-            }
-        }
-    }
-
-    public void ReturnTestExecutionEvent(ExternalEvent evt)
-    {
-        lock (_lock)
-        {
-            if (!_disposed) 
-            {
-                PooledRevitTestExecutionHandler.SetCurrentHandler(null);
-                _testExecutionEvents.Enqueue(evt);
-            }
-        }
-    }
-
-    public void Dispose()
-    {
-        lock (_lock)
-        {
-            if (_disposed) return;
-            _disposed = true;
-
-            // Dispose all ExternalEvents
-            while (_modelSetupEvents.Count > 0)
-                _modelSetupEvents.Dequeue().Dispose();
-            while (_modelCleanupEvents.Count > 0)
-                _modelCleanupEvents.Dequeue().Dispose();
-            while (_testExecutionEvents.Count > 0)
-                _testExecutionEvents.Dequeue().Dispose();
-        }
-    }
-}
-
-/// <summary>
-/// Pooled handler for model setup - uses dependency injection for actual work
-/// </summary>
-public class PooledRevitModelSetupHandler : IExternalEventHandler
-{
-    private static RevitModelSetupHandler? _currentHandler;
-    private static readonly object _lock = new();
-
-    public static void SetCurrentHandler(RevitModelSetupHandler? handler)
-    {
-        lock (_lock)
-        {
-            _currentHandler = handler;
-        }
-    }
-
-    public void Execute(UIApplication app)
-    {
-        lock (_lock)
-        {
-            _currentHandler?.Execute(app);
-        }
-    }
-
-    public string GetName() => nameof(PooledRevitModelSetupHandler);
-}
-
-/// <summary>
-/// Pooled handler for model cleanup - uses dependency injection for actual work
-/// </summary>
-public class PooledRevitModelCleanupHandler : IExternalEventHandler
-{
-    private static RevitModelCleanupHandler? _currentHandler;
-    private static readonly object _lock = new();
-
-    public static void SetCurrentHandler(RevitModelCleanupHandler? handler)
-    {
-        lock (_lock)
-        {
-            _currentHandler = handler;
-        }
-    }
-
-    public void Execute(UIApplication app)
-    {
-        lock (_lock)
-        {
-            _currentHandler?.Execute(app);
-        }
-    }
-
-    public string GetName() => nameof(PooledRevitModelCleanupHandler);
-}
-
-/// <summary>
-/// Pooled handler for test execution - uses dependency injection for actual work
-/// </summary>
-public class PooledRevitTestExecutionHandler : IExternalEventHandler
-{
-    private static RevitTestExecutionHandler? _currentHandler;
-    private static readonly object _lock = new();
-
-    public static void SetCurrentHandler(RevitTestExecutionHandler? handler)
-    {
-        lock (_lock)
-        {
-            _currentHandler = handler;
-        }
-    }
-
-    public void Execute(UIApplication app)
-    {
-        lock (_lock)
-        {
-            _currentHandler?.Execute(app);
-        }
-    }
-
-    public string GetName() => nameof(PooledRevitTestExecutionHandler);
 }
 
 // Clean xUnit integration without reflection
