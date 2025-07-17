@@ -32,7 +32,7 @@
   
   <ItemGroup>
     <ProjectReference Include="..\RevitAdapterCommon\RevitAdapterCommon.csproj" />
-    <ProjectReference Include="..\RevitTestFramework.Xunit\RevitTestFramework.Xunit.csproj" />
+    <ProjectReference Include="..\RevitTestFramework.Xunit.Contracts\RevitTestFramework.Xunit.Contracts.csproj" />
   </ItemGroup>
 
   <!-- Package the test adapter files correctly for NuGet -->

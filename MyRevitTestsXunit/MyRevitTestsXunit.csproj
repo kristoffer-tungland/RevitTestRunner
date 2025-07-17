@@ -14,6 +14,7 @@
   
   <ItemGroup>
     <ProjectReference Include="..\RevitTestFramework.Xunit\RevitTestFramework.Xunit.csproj" />
+    <ProjectReference Include="..\RevitTestFramework.Xunit.Contracts\RevitTestFramework.Xunit.Contracts.csproj" />
     <ProjectReference Include="..\RevitXunitAdapter\RevitXunitAdapter.csproj" />
   </ItemGroup>
   

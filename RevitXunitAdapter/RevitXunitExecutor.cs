@@ -62,7 +62,7 @@ namespace RevitXunitAdapter
 
                 var command = new PipeCommand
                 {
-                    Command = "RunXunitTests",
+                    Command = "RunTests",
                     TestAssembly = assembly,
                     TestMethods = methods,
                     CancelPipe = "RevitCancel_" + Guid.NewGuid().ToString("N")

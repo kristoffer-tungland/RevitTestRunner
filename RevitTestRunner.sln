@@ -23,6 +23,14 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RevitAddin.Common", "RevitA
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RevitAddin.Xunit", "RevitAddin.Xunit\RevitAddin.Xunit.csproj", "{8A805D4B-9597-3D5A-2B1E-E37B3AADD210}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RevitTestFramework.Xunit.Contracts", "RevitTestFramework.Xunit.Contracts\RevitTestFramework.Xunit.Contracts.csproj", "{AB650918-E997-C2D4-59B0-F433D06A1661}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{089100B1-113F-4E66-888A-E83F3999EAFD}"
+	ProjectSection(SolutionItems) = preProject
+		README.md = README.md
+		Start Revit Hidden.md = Start Revit Hidden.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -117,6 +125,18 @@ Global
 		{8A805D4B-9597-3D5A-2B1E-E37B3AADD210}.Release|x64.Build.0 = Release|Any CPU
 		{8A805D4B-9597-3D5A-2B1E-E37B3AADD210}.Release|x86.ActiveCfg = Release|Any CPU
 		{8A805D4B-9597-3D5A-2B1E-E37B3AADD210}.Release|x86.Build.0 = Release|Any CPU
+		{AB650918-E997-C2D4-59B0-F433D06A1661}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AB650918-E997-C2D4-59B0-F433D06A1661}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AB650918-E997-C2D4-59B0-F433D06A1661}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AB650918-E997-C2D4-59B0-F433D06A1661}.Debug|x64.Build.0 = Debug|Any CPU
+		{AB650918-E997-C2D4-59B0-F433D06A1661}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AB650918-E997-C2D4-59B0-F433D06A1661}.Debug|x86.Build.0 = Debug|Any CPU
+		{AB650918-E997-C2D4-59B0-F433D06A1661}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AB650918-E997-C2D4-59B0-F433D06A1661}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AB650918-E997-C2D4-59B0-F433D06A1661}.Release|x64.ActiveCfg = Release|Any CPU
+		{AB650918-E997-C2D4-59B0-F433D06A1661}.Release|x64.Build.0 = Release|Any CPU
+		{AB650918-E997-C2D4-59B0-F433D06A1661}.Release|x86.ActiveCfg = Release|Any CPU
+		{AB650918-E997-C2D4-59B0-F433D06A1661}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -129,6 +149,7 @@ Global
 		{F250959A-C8C4-2F05-0462-72F81696AEA2} = {D64246B1-3E22-9D95-23C6-14262B074D58}
 		{442AAB45-16DB-484C-279B-F312283CD134} = {D64246B1-3E22-9D95-23C6-14262B074D58}
 		{8A805D4B-9597-3D5A-2B1E-E37B3AADD210} = {D64246B1-3E22-9D95-23C6-14262B074D58}
+		{AB650918-E997-C2D4-59B0-F433D06A1661} = {D64246B1-3E22-9D95-23C6-14262B074D58}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {943B8341-6CCD-49E8-A483-FD5C826D2C1F}
