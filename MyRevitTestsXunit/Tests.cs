@@ -17,5 +17,12 @@ public class MyRevitTestsClass
     {
         Assert.NotNull(doc);
         Assert.Equal("Snowdon Towers Sample Architectural", doc.Title);
+
+        var wallsCount = new FilteredElementCollector(doc)
+            .WhereElementIsNotElementType()
+            .OfClass(typeof(Wall))
+            .GetElementCount();
+
+        Assert.True(wallsCount > 0, "Expected at least one wall in the model.");
     }
 }

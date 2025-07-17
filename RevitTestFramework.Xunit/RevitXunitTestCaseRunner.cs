@@ -122,25 +122,54 @@ public class RevitUITestRunner : XunitTestRunner
     }
 
     protected override async Task<decimal> InvokeTestMethodAsync(ExceptionAggregator aggregator)
-    {
-        // For Revit tests, we need to execute the actual test method on the UI thread
-        var testExecutionHandler = new RevitTestExecutionHandler(TestClass, ConstructorArguments, TestMethod, TestMethodArguments);
-        
+    {        
         // Wait for completion with timeout
         //using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
         //cts.Token.Register(() => tcs.TrySetCanceled());
         
         try
         {
-            var result = await RevitTestInfrastructure.RevitTask.Run(testExecutionHandler.Execute);
+            Exception? exception = null;
+
+            var result = await RevitTestInfrastructure.RevitTask.Run(app =>
+            {
+                var timer = new Stopwatch();
+                timer.Start();
+
+                try
+                {
+                    // Create test instance
+                    var testInstance = Activator.CreateInstance(TestClass, ConstructorArguments);
+
+                    // Invoke the test method
+                    var result = TestMethod.Invoke(testInstance, TestMethodArguments);
+
+                    // Handle async test methods
+                    if (result is Task task)
+                    {
+                        task.Wait();
+                    }
+
+                    timer.Stop();
+                    return timer.ElapsedMilliseconds;
+                }
+                catch (Exception ex)
+                {
+                    timer.Stop();
+                    exception = ex.InnerException ?? ex;
+                    return timer.ElapsedMilliseconds;
+                }
+
+            });
 
             // If the test method threw an exception, it will be in the handler
-            if (testExecutionHandler.Exception != null)
+            if (exception != null)
             {
-                aggregator.Add(testExecutionHandler.Exception);
+                aggregator.Add(exception);
             }
-            
-            return result;
+
+            // Convert milliseconds to seconds
+            return result / 1000m;
         }
         catch (OperationCanceledException)
         {
