@@ -16,6 +16,6 @@ public class MyRevitTestsClass
     public void TestLocalFile(Document doc)
     {
         Assert.NotNull(doc);
-        Assert.Equal("Snowdon Towers Sample Architecturalfdfd", doc.Title);
+        Assert.Equal("Snowdon Towers Sample Architectural", doc.Title);
     }
 }
