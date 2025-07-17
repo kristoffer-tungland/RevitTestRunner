@@ -1,7 +1,4 @@
-using System;
 using System.Diagnostics;
-using System.Reflection;
-using System.Threading.Tasks;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 
@@ -41,7 +38,7 @@ public static class RevitTestModelHelper
         opts.SetOpenWorksetsConfiguration(new WorksetConfiguration(WorksetConfigurationOption.CloseAllWorksets));
         opts.Audit = false;
 
-        System.Diagnostics.Debug.WriteLine($"Opening model on UI thread: {localPath}");
+        Debug.WriteLine($"Opening model on UI thread: {localPath}");
         var doc = app.OpenDocumentFile(modelPath, opts);
 
         if (doc == null)
@@ -49,7 +46,7 @@ public static class RevitTestModelHelper
             throw new InvalidOperationException($"OpenDocumentFile returned null for path: {localPath}");
         }
 
-        System.Diagnostics.Debug.WriteLine($"Successfully opened model on UI thread: {doc.Title}");
+        Debug.WriteLine($"Successfully opened model on UI thread: {doc.Title}");
         return doc;
     }
 
@@ -64,7 +61,7 @@ public static class RevitTestModelHelper
         openOpts.DetachFromCentralOption = DetachFromCentralOption.DoNotDetach;
         openOpts.SetOpenWorksetsConfiguration(new WorksetConfiguration(WorksetConfigurationOption.CloseAllWorksets));
 
-        System.Diagnostics.Debug.WriteLine($"Opening cloud model on UI thread: {projectGuid}:{modelGuid}");
+        Debug.WriteLine($"Opening cloud model on UI thread: {projectGuid}:{modelGuid}");
         var doc = app.OpenDocumentFile(cloudPath, openOpts);
 
         if (doc == null)
@@ -72,7 +69,7 @@ public static class RevitTestModelHelper
             throw new InvalidOperationException($"OpenDocumentFile returned null for cloud model: {projectGuid}:{modelGuid}");
         }
 
-        System.Diagnostics.Debug.WriteLine($"Successfully opened cloud model on UI thread: {doc.Title}");
+        Debug.WriteLine($"Successfully opened cloud model on UI thread: {doc.Title}");
         return doc;
     }
 }

@@ -9,11 +9,11 @@ public class PipeServer : IDisposable
 {
     private readonly string _pipeName;
     private readonly RevitTask _revitTask;
-    private readonly Func<string, IXunitTestAssemblyLoadContext> _createLoadContext;
+    private readonly Func<string, ITestAssemblyLoadContext> _createLoadContext;
     private readonly CancellationTokenSource _cts = new();
     private Task? _listenerTask;
 
-    public PipeServer(string pipeName, RevitTask revitTask, Func<string, IXunitTestAssemblyLoadContext> createLoadContext)
+    public PipeServer(string pipeName, RevitTask revitTask, Func<string, ITestAssemblyLoadContext> createLoadContext)
     {
         _pipeName = pipeName;
         _revitTask = revitTask;

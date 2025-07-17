@@ -3,7 +3,7 @@ using System.Reflection;
 
 namespace RevitAddin.Common
 {
-    public interface IXunitTestAssemblyLoadContext
+    public interface ITestAssemblyLoadContext
     {
         string TestDirectory { get; }
 

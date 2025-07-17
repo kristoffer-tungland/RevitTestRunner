@@ -14,10 +14,10 @@ public class PipeCommandHandler
     private readonly NamedPipeServerStream _server;
     private readonly RevitTask _revitTask;
     private readonly string _testAssemblyPath;
-    private readonly Func<string, IXunitTestAssemblyLoadContext> _createLoadContext;
+    private readonly Func<string, ITestAssemblyLoadContext> _createLoadContext;
 
     public PipeCommandHandler(PipeCommand command, NamedPipeServerStream server, RevitTask revitTask, string testAssemblyPath,
-        Func<string, IXunitTestAssemblyLoadContext> createLoadContext)
+        Func<string, ITestAssemblyLoadContext> createLoadContext)
     {
         _command = command ?? throw new ArgumentNullException(nameof(command));
         _server = server ?? throw new ArgumentNullException(nameof(server));

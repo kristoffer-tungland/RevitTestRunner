@@ -8,7 +8,7 @@ namespace RevitAddin.Xunit;
 /// <summary>
 /// Custom AssemblyLoadContext for loading xUnit tests in isolation
 /// </summary>
-internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, IXunitTestAssemblyLoadContext
+internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssemblyLoadContext
 {
     public string TestDirectory { get; }
     private readonly string _revitAddinDirectory;
