@@ -74,6 +74,7 @@ namespace RevitXunitAdapter
                 // For now, hardcode Revit version as "2025" as requested
                 const string revitVersion = "2025";
                 
+                // Pass the framework handle directly - it will be converted to a logger automatically
                 PipeClientHelper.SendCommandStreaming(command, line =>
                 {
                     if (line == "END")
@@ -108,7 +109,7 @@ namespace RevitXunitAdapter
                     {
                         frameworkHandle.SendMessage(TestMessageLevel.Error, $"RevitXunitExecutor: Error processing result line '{line}': {ex.Message}");
                     }
-                }, token, revitVersion);
+                }, token, revitVersion, frameworkHandle);
             }
             catch (Exception ex)
             {
