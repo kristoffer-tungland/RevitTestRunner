@@ -1,6 +1,11 @@
+using RevitTestFramework.Contracts;
+
 namespace RevitAddin.Common;
 
 public static class PipeConstants
 {
-    public const string PipeNamePrefix = "RevitTestPipe_";
+    /// <summary>
+    /// The prefix used for all Revit test pipe names
+    /// </summary>
+    public const string PipeNamePrefix = PipeNaming.PipeNamePrefix;
 }

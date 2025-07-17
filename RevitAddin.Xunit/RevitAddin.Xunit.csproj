@@ -13,6 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="..\RevitAddin.Common\RevitAddin.Common.csproj" />
     <ProjectReference Include="..\RevitTestFramework.Xunit\RevitTestFramework.Xunit.csproj" />
+    <ProjectReference Include="..\RevitTestFramework.Contracts\RevitTestFramework.Contracts.csproj" />
   </ItemGroup>
   
   <!-- Include installation script in the build output -->

@@ -1,5 +1,6 @@
 using System.IO.Pipes;
 using RevitTestFramework.Common;
+using RevitTestFramework.Contracts;
 
 namespace RevitAddin.Common;
 

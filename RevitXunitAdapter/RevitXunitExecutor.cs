@@ -2,6 +2,7 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Adapter;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 using RevitAdapterCommon;
+using RevitTestFramework.Contracts;
 using System.Text.Json;
 
 namespace RevitXunitAdapter
@@ -70,6 +71,9 @@ namespace RevitXunitAdapter
 
                 frameworkHandle.SendMessage(TestMessageLevel.Informational, "RevitXunitExecutor: Sending command to Revit via named pipe");
 
+                // For now, hardcode Revit version as "2025" as requested
+                const string revitVersion = "2025";
+                
                 PipeClientHelper.SendCommandStreaming(command, line =>
                 {
                     if (line == "END")
@@ -104,7 +108,7 @@ namespace RevitXunitAdapter
                     {
                         frameworkHandle.SendMessage(TestMessageLevel.Error, $"RevitXunitExecutor: Error processing result line '{line}': {ex.Message}");
                     }
-                }, token);
+                }, token, revitVersion);
             }
             catch (Exception ex)
             {

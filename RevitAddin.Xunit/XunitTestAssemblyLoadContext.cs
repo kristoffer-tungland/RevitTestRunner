@@ -2,6 +2,7 @@ using System.Runtime.Loader;
 using System.Reflection;
 using Autodesk.Revit.UI;
 using RevitAddin.Common;
+using RevitTestFramework.Contracts;
 
 namespace RevitAddin.Xunit;
 

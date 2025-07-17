@@ -4,6 +4,7 @@ using Xunit;
 using Xunit.Abstractions;
 using RevitAddin.Common;
 using RevitTestFramework.Common;
+using RevitTestFramework.Contracts;
 using System.Text.Json;
 
 namespace RevitAddin.Xunit;

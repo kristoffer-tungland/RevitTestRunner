@@ -1,6 +1,7 @@
 using Autodesk.Revit.UI;
 using RevitAddin.Common;
 using RevitTestFramework.Common;
+using RevitTestFramework.Contracts;
 using System.Diagnostics;
 using System.Reflection;
 
@@ -25,9 +26,15 @@ public class RevitApplication : IExternalApplication
             string addinLocation = Assembly.GetExecutingAssembly().Location;
             Trace.WriteLine($"RevitAddin.Xunit starting from: {addinLocation}");
 
+            // Extract Revit version from the application
+            var revitVersion = application.ControlledApplication.VersionNumber;
+            Trace.WriteLine($"RevitAddin.Xunit detected Revit version: {revitVersion}");
+
             // Use RevitTask to manage UI thread execution
             _revitTask = new RevitTask();
-            var pipeName = PipeConstants.PipeNamePrefix + Environment.ProcessId;
+            var pipeName = PipeNaming.GetCurrentProcessPipeName(revitVersion);
+            Trace.WriteLine($"RevitAddin.Xunit using pipe name: {pipeName}");
+            
             _server = new PipeServer(pipeName, _revitTask, path => new XunitTestAssemblyLoadContext(path));
             _server.Start();
             
