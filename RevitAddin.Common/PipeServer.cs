@@ -88,7 +88,28 @@ public class PipeServer : IDisposable
 
     public void Dispose()
     {
-        try { _listenerTask?.Wait(); } catch { }
+        try
+        {
+            // Cancel the token source first to signal the ListenAsync loop to exit
+            _cts.Cancel();
+            
+            // Wait for the listener task to complete with a reasonable timeout
+            if (_listenerTask != null)
+            {
+                if (!_listenerTask.Wait(TimeSpan.FromSeconds(5)))
+                {
+                    System.Diagnostics.Debug.WriteLine("PipeServer: Listener task did not complete within timeout");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"PipeServer: Error during disposal: {ex.Message}");
+        }
+        finally
+        {
+            _cts.Dispose();
+        }
     }
 
     private static void CleanupTempDirectory(string tempTestDir)
