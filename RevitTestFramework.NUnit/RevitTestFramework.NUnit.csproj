@@ -1,10 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsTestProject>false</IsTestProject>
-  </PropertyGroup>
+  <!-- Common properties and version info are in Directory.Build.props -->
   <ItemGroup>
     <PackageReference Include="NUnit" Version="4.3.2" />
   </ItemGroup>

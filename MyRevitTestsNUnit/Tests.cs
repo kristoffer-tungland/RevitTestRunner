@@ -1,6 +1,7 @@
 using NUnit.Framework;
 using RevitTestFramework.NUnit;
 using RevitTestFramework.Common;
+using Autodesk.Revit.DB;
 
 namespace MyRevitTestsNUnit
 {
@@ -9,16 +10,16 @@ namespace MyRevitTestsNUnit
     {
         [Test]
         [RevitNUnitTestModel("proj-guid", "model-guid")]
-        public void TestWalls()
+        public void TestWalls(Document doc)
         {
-            Assert.That(RevitModelService.CurrentDocument, Is.Not.Null);
+            Assert.That(doc, Is.Not.Null);
         }
 
         [Test]
         [RevitNUnitTestModel(@"C:\\Models\\sample.rvt")]
-        public void TestLocalFile()
+        public void TestLocalFile(Document doc)
         {
-            Assert.That(RevitModelService.CurrentDocument, Is.Not.Null);
+            Assert.That(doc, Is.Not.Null);
         }
     }
 }

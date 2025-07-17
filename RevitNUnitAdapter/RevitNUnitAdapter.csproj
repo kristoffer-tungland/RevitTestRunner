@@ -1,9 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <IsTestProject>false</IsTestProject>
+    <!-- CRITICAL: Must have .TestAdapter.dll in the name for VS Test Platform to discover it -->
+    <AssemblyName>RevitNUnit.TestAdapter</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />

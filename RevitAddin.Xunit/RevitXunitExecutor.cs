@@ -1,69 +1,127 @@
-using System.Runtime.Loader;
 using System.Xml.Linq;
 using Autodesk.Revit.UI;
 using Xunit;
 using Xunit.Abstractions;
+using Xunit.Sdk;
 using RevitAddin.Common;
 using RevitTestFramework.Common;
 using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace RevitAddin.Xunit;
 
 public static class RevitXunitExecutor
 {
-    public static void ExecuteTestsInRevit(PipeCommand command, UIApplication uiApp, StreamWriter writer, CancellationToken cancellationToken)
+
+    /// <summary>
+    /// Sets up the required Revit API infrastructure (ExternalEvents, etc.).
+    /// This method MUST be called from the Revit UI thread.
+    /// </summary>
+    public static void SetupInfrastructure(UIApplication uiApp)
     {
-        // Set up model service with our local handlers
-        RevitModelService.OpenLocalModel = localPath => RevitModelUtility.EnsureModelOpen(uiApp, localPath);
-        RevitModelService.OpenCloudModel = (projectGuid, modelGuid) => RevitModelUtility.EnsureModelOpen(uiApp, projectGuid, modelGuid);
+        RevitTestInfrastructure.Setup(uiApp);
+    }
+
+    /// <summary>
+    /// Cleans up the Revit API infrastructure after tests have run.
+    /// This method MUST be called from the Revit UI thread.
+    /// </summary>
+    public static void TeardownInfrastructure()
+    {
+        RevitTestInfrastructure.Dispose();
+    }
+
+    public static async Task ExecuteTestsInRevitAsync(string commandJson, string testAssemblyPath, StreamWriter writer, CancellationToken cancellationToken)
+    {
+        // Deserialize the command in the isolated context to avoid cross-ALC type issues
+        var command = JsonSerializer.Deserialize<PipeCommand>(commandJson)
+            ?? throw new InvalidOperationException("Failed to deserialize PipeCommand");
+
         RevitModelService.CancellationToken = cancellationToken;
-        
-        var testAssemblyPath = command.TestAssembly;
         var methods = command.TestMethods;
-        var loadContext = new AssemblyLoadContext("XUnitTestContext", isCollectible: false);
 
-        var testDir = Path.GetDirectoryName(testAssemblyPath) ?? string.Empty;
-        loadContext.Resolving += (_, name) =>
+        // Execute tests on a background thread to avoid blocking Revit UI
+        // IMPORTANT: Use await instead of .Wait() to prevent UI thread deadlock
+        await Task.Run(async () =>
         {
-            var candidate = Path.Combine(testDir, name.Name + ".dll");
-            return File.Exists(candidate) ? loadContext.LoadFromAssemblyPath(candidate) : null;
-        };
+            try
+            {
+                // Now we can use xUnit directly since we're running in the isolated ALC!
+                var assemblyElement = new XElement("assembly");
+                using var controller = new XunitFrontController(AppDomainSupport.Denied, testAssemblyPath, shadowCopy: false);
+                var discoveryOptions = TestFrameworkOptions.ForDiscovery();
+                
+                var configuration = new TestAssemblyConfiguration
+                {
+                    ParallelizeAssembly = false,
+                    ParallelizeTestCollections = false,
+                };
 
-        loadContext.LoadFromAssemblyPath(typeof(XunitFrontController).Assembly.Location);
-        loadContext.LoadFromAssemblyPath(testAssemblyPath);
+                var executionOptions = TestFrameworkOptions.ForExecution(configuration);
 
-        var assemblyElement = new XElement("assembly");
-        using var controller = new XunitFrontController(AppDomainSupport.Denied, testAssemblyPath);
-        var discoveryOptions = TestFrameworkOptions.ForDiscovery();
-        var executionOptions = TestFrameworkOptions.ForExecution();
+                List<ITestCase> testCases;
+                var discoverySink = new TestDiscoverySink();
+                controller.Find(false, discoverySink, discoveryOptions);
+                discoverySink.Finished.WaitOne();
+                testCases = discoverySink.TestCases.ToList();
 
-        List<ITestCase> testCases;
-        using (var discoverySink = new TestDiscoverySink())
+                // Filter test cases if specific methods are requested
+                if (methods != null && methods.Length > 0)
+                {
+                    testCases = testCases.Where(tc => methods.Contains(tc.TestMethod.TestClass.Class.Name + "." + tc.TestMethod.Method.Name)).ToList();
+                }
+
+                using var visitor = new StreamingXmlTestExecutionVisitor(writer, assemblyElement, () => cancellationToken.IsCancellationRequested);
+                controller.RunTests(testCases, visitor, executionOptions);
+                visitor.Finished.WaitOne();
+
+                string resultXml = new XDocument(assemblyElement).ToString();
+                var fileName = $"RevitXunitResults_{Guid.NewGuid():N}.xml";
+                var resultsPath = Path.Combine(Path.GetTempPath(), fileName);
+                File.WriteAllText(resultsPath, resultXml);
+                writer.WriteLine("END");
+                writer.Flush();
+            }
+            catch (Exception ex)
+            {
+                HandleTestExecutionException(ex, command.TestMethods, writer);
+            }
+        }, cancellationToken);
+    }
+
+    private static void HandleTestExecutionException(Exception ex, string[]? methods, StreamWriter writer)
+    {
+        try
         {
-            controller.Find(false, discoverySink, discoveryOptions);
-            discoverySink.Finished.WaitOne();
-            testCases = discoverySink.TestCases.ToList();
+            // Create a failure result message for any tests that were supposed to run
+            var failureMessage = new PipeTestResultMessage
+            {
+                Name = methods?.Length > 0 ? string.Join(", ", methods) : "TestExecution",
+                Outcome = "Failed",
+                Duration = 0,
+                ErrorMessage = $"Test execution failed: {ex.Message}",
+                ErrorStackTrace = ex.ToString()
+            };
+
+            // Report the failure
+            var json = JsonSerializer.Serialize(failureMessage);
+            writer.WriteLine(json);
+            writer.WriteLine("END");
+            writer.Flush();
+
+            // Log the exception for debugging
+            System.Diagnostics.Debug.WriteLine($"RevitXunitExecutor: Test execution failed with exception: {ex}");
         }
-
-        if (methods != null && methods.Length > 0)
+        catch (Exception writeEx)
         {
-            testCases = testCases.Where(tc => methods.Contains(tc.TestMethod.TestClass.Class.Name + "." + tc.TestMethod.Method.Name)).ToList();
+            // If we can't even write the error, log it
+            System.Diagnostics.Debug.WriteLine($"RevitXunitExecutor: Failed to write error message: {writeEx}");
+            System.Diagnostics.Debug.WriteLine($"RevitXunitExecutor: Original exception: {ex}");
         }
-
-        using var visitor = new StreamingXmlTestExecutionVisitor(writer, assemblyElement, () => cancellationToken.IsCancellationRequested);
-        controller.RunTests(testCases, visitor, executionOptions);
-        visitor.Finished.WaitOne();
-
-        string resultXml = new XDocument(assemblyElement).ToString();
-        var fileName = $"RevitXunitResults_{Guid.NewGuid():N}.xml";
-        var resultsPath = Path.Combine(Path.GetTempPath(), fileName);
-        File.WriteAllText(resultsPath, resultXml);
-        writer.WriteLine("END");
-        writer.Flush();
-        RevitModelService.CancellationToken = CancellationToken.None;
     }
 }
 
+// Clean xUnit integration without reflection
 internal class StreamingXmlTestExecutionVisitor : XmlTestExecutionVisitor
 {
     private readonly StreamWriter _writer;
@@ -115,5 +173,26 @@ internal class StreamingXmlTestExecutionVisitor : XmlTestExecutionVisitor
             ErrorMessage = testSkipped.Reason
         });
         return base.Visit(testSkipped);
+    }
+}
+
+// TestDiscoverySink for clean xUnit integration
+internal class TestDiscoverySink : global::Xunit.Sdk.LongLivedMarshalByRefObject, IMessageSink
+{
+    public ManualResetEvent Finished { get; } = new ManualResetEvent(false);
+    public List<ITestCase> TestCases { get; } = new();
+
+    public bool OnMessage(IMessageSinkMessage message)
+    {
+        switch (message)
+        {
+            case ITestCaseDiscoveryMessage testCaseDiscovered:
+                TestCases.Add(testCaseDiscovered.TestCase);
+                break;
+            case IDiscoveryCompleteMessage:
+                Finished.Set();
+                break;
+        }
+        return true;
     }
 }
