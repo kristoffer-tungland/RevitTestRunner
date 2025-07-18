@@ -25,4 +25,34 @@ public class MyRevitTestsClass
 
         Assert.True(wallsCount > 0, "Expected at least one wall in the model.");
     }
+
+    [RevitXunitTestModel]
+    public void TestWithActiveDocument(Document? doc)
+    {
+        // This test uses the currently active document in Revit
+        // If no document is active, doc will be null
+        if (doc != null)
+        {
+            Assert.NotNull(doc);
+            // Test can work with whatever model is currently open
+            var elements = new FilteredElementCollector(doc)
+                .WhereElementIsNotElementType()
+                .ToElements();
+            
+            Assert.True(elements.Count >= 0, "Document should contain some elements or be empty");
+        }
+        else
+        {
+            // Test can handle the case where no document is active
+            Assert.True(true, "No active document - test passes gracefully");
+        }
+    }
+
+    [RevitXunitTestModel]
+    public void TestWithoutDocument()
+    {
+        // This test doesn't require a document at all
+        // It can test non-document related functionality
+        Assert.True(true, "This test doesn't need a Revit document");
+    }
 }

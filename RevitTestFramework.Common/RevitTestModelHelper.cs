@@ -7,8 +7,22 @@ namespace RevitTestFramework.Common;
 public static class RevitTestModelHelper
 {
 
-    public static Document OpenModel(UIApplication uiApp, string? localPath, string? projectGuid, string? modelGuid)
+    public static Document? OpenModel(UIApplication uiApp, string? localPath, string? projectGuid, string? modelGuid)
     {
+        // If no parameters are provided, return the currently active document
+        if (string.IsNullOrEmpty(localPath) && string.IsNullOrEmpty(projectGuid) && string.IsNullOrEmpty(modelGuid))
+        {
+            var activeDoc = uiApp.ActiveUIDocument?.Document;
+            if (activeDoc == null)
+            {
+                Debug.WriteLine("No active document is currently open in Revit.");
+                return null;
+            }
+            
+            Debug.WriteLine($"Using currently active model: {activeDoc.Title}");
+            return activeDoc;
+        }
+        
         if (string.IsNullOrEmpty(localPath) && (string.IsNullOrEmpty(projectGuid) || string.IsNullOrEmpty(modelGuid)))
         {
             throw new ArgumentException("Either localPath or both projectGuid and modelGuid must be provided.");

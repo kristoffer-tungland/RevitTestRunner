@@ -37,6 +37,14 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
                     {
                         return RevitTestModelHelper.OpenModel(app, _localPath, _projectGuid, _modelGuid);
                     });
+                    
+                    // If no document was opened and all parameters are null, 
+                    // this might be a test that doesn't need a document
+                    if (_document == null && string.IsNullOrEmpty(_localPath) && 
+                        string.IsNullOrEmpty(_projectGuid) && string.IsNullOrEmpty(_modelGuid))
+                    {
+                        Debug.WriteLine($"Test '{methodName}' will run without a specific document (no active document available)");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -44,20 +52,24 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
                     throw new InvalidOperationException($"Model setup failed for test '{methodName}': {unwrappedException.Message}", unwrappedException);
                 }
 
-                try
+                // Only create transaction group if we have a document
+                if (_document != null)
                 {
-                    _transactionGroup = await RevitTestInfrastructure.RevitTask.Run(app =>
+                    try
                     {
-                        // Start a transaction group for the test
-                        var tg = new TransactionGroup(_document, $"Test: {methodName}");
-                        tg.Start();
-                        return tg;
-                    });
-                }
-                catch (Exception ex)
-                {
-                    var unwrappedException = UnwrapException(ex);
-                    throw new InvalidOperationException($"Transaction group creation failed for test '{methodName}': {unwrappedException.Message}", unwrappedException);
+                        _transactionGroup = await RevitTestInfrastructure.RevitTask.Run(app =>
+                        {
+                            // Start a transaction group for the test
+                            var tg = new TransactionGroup(_document, $"Test: {methodName}");
+                            tg.Start();
+                            return tg;
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        var unwrappedException = UnwrapException(ex);
+                        throw new InvalidOperationException($"Transaction group creation failed for test '{methodName}': {unwrappedException.Message}", unwrappedException);
+                    }
                 }
 
                 // Now run the test with the prepared document
@@ -136,7 +148,8 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
         ExceptionAggregator aggregator,
         CancellationTokenSource cancellationTokenSource)
     {
-        if (_document != null)
+        // Only inject document if we have one and the test method expects it
+        if (_document != null && testMethod.GetParameters().Length > testMethodArguments.Length)
         {
             var args = new object[testMethodArguments.Length + 1];
             args[0] = _document;

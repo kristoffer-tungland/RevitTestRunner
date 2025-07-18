@@ -11,6 +11,12 @@ public class RevitXunitTestModelAttribute : FactAttribute
     public string? ModelGuid { get; }
     public string? LocalPath { get; }
 
+    public RevitXunitTestModelAttribute()
+    {
+        // Empty constructor for tests that don't need a specific model
+        // or want to use the currently active model in Revit
+    }
+
     public RevitXunitTestModelAttribute(string projectGuid, string modelGuid)
     {
         ProjectGuid = projectGuid;
