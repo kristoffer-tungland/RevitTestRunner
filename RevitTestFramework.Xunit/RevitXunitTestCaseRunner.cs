@@ -13,6 +13,7 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
     string? projectGuid, string? modelGuid, string? localPath) : XunitTestCaseRunner(testCase, displayName, skipReason, constructorArguments, [],
            messageBus, aggregator, cancellationTokenSource)
 {
+    private readonly ExceptionAggregator _aggregator = aggregator;
     private readonly string? _projectGuid = projectGuid;
     private readonly string? _modelGuid = modelGuid;
     private readonly string? _localPath = localPath;
@@ -30,20 +31,48 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
             try
             {
                 // Request model setup on UI thread and wait for completion
-                _document = await RevitTestInfrastructure.RevitTask.Run(app =>
+                try
                 {
-                    return RevitTestModelHelper.OpenModel(app, _localPath, _projectGuid, _modelGuid);
-                });
+                    _document = await RevitTestInfrastructure.RevitTask.Run(app =>
+                    {
+                        return RevitTestModelHelper.OpenModel(app, _localPath, _projectGuid, _modelGuid);
+                    });
+                }
+                catch (Exception ex)
+                {
+                    var unwrappedException = UnwrapException(ex);
+                    throw new InvalidOperationException($"Model setup failed for test '{methodName}': {unwrappedException.Message}", unwrappedException);
+                }
 
-                _transactionGroup = await RevitTestInfrastructure.RevitTask.Run(app =>
+                try
                 {
-                    // Start a transaction group for the test
-                    var tg = new TransactionGroup(_document, $"Test: {methodName}");
-                    tg.Start();
-                    return tg;
-                });
+                    _transactionGroup = await RevitTestInfrastructure.RevitTask.Run(app =>
+                    {
+                        // Start a transaction group for the test
+                        var tg = new TransactionGroup(_document, $"Test: {methodName}");
+                        tg.Start();
+                        return tg;
+                    });
+                }
+                catch (Exception ex)
+                {
+                    var unwrappedException = UnwrapException(ex);
+                    throw new InvalidOperationException($"Transaction group creation failed for test '{methodName}': {unwrappedException.Message}", unwrappedException);
+                }
 
                 // Now run the test with the prepared document
+                return await base.RunTestAsync();
+            }
+            catch (Exception ex)
+            {
+                // Handle any exceptions that occur during test setup or execution
+                var unwrappedException = UnwrapException(ex);
+                Debug.WriteLine($"Error running test {methodName}: {unwrappedException.Message}");
+                
+                // Add the unwrapped exception to the aggregator for proper reporting
+                _aggregator.Add(unwrappedException);
+                
+                // Let the base class handle the exception reporting
                 return await base.RunTestAsync();
             }
             finally
@@ -61,7 +90,8 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
                         }
                         catch (Exception ex)
                         {
-                            Debug.WriteLine($"Error rolling back transaction group: {ex.Message}");
+                            var unwrappedException = UnwrapException(ex);
+                            Debug.WriteLine($"Error rolling back transaction group: {unwrappedException.Message}");
                         }
                         finally
                         {
@@ -71,6 +101,27 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
                 });
             }
         });
+    }
+
+    /// <summary>
+    /// Unwraps TargetInvocationException and other wrapper exceptions to get the actual exception
+    /// </summary>
+    private static Exception UnwrapException(Exception ex)
+    {
+        // Unwrap TargetInvocationException
+        if (ex is System.Reflection.TargetInvocationException tie && tie.InnerException != null)
+        {
+            return UnwrapException(tie.InnerException);
+        }
+        
+        // Unwrap AggregateException (single inner exception)
+        if (ex is AggregateException ae && ae.InnerExceptions.Count == 1)
+        {
+            return UnwrapException(ae.InnerExceptions[0]);
+        }
+        
+        // Return the original exception if no unwrapping is needed
+        return ex;
     }
 
     protected override XunitTestRunner CreateTestRunner(
@@ -143,7 +194,8 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
                 catch (Exception ex)
                 {
                     timer.Stop();
-                    exception = ex.InnerException ?? ex;
+                    // Unwrap TargetInvocationException to get the actual test exception
+                    exception = UnwrapException(ex);
                     return timer.ElapsedMilliseconds;
                 }
 
@@ -163,5 +215,26 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
             aggregator.Add(new TimeoutException($"Test method {TestMethod.Name} timed out after 10 minutes"));
             return 0;
         }
+    }
+
+    /// <summary>
+    /// Unwraps TargetInvocationException and other wrapper exceptions to get the actual exception
+    /// </summary>
+    private static Exception UnwrapException(Exception ex)
+    {
+        // Unwrap TargetInvocationException
+        if (ex is System.Reflection.TargetInvocationException tie && tie.InnerException != null)
+        {
+            return UnwrapException(tie.InnerException);
+        }
+        
+        // Unwrap AggregateException (single inner exception)
+        if (ex is AggregateException ae && ae.InnerExceptions.Count == 1)
+        {
+            return UnwrapException(ae.InnerExceptions[0]);
+        }
+        
+        // Return the original exception if no unwrapping is needed
+        return ex;
     }
 }

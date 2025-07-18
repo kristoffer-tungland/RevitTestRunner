@@ -15,7 +15,6 @@ namespace RevitXunitAdapter
 
         public void RunTests(IEnumerable<TestCase>? tests, IRunContext? runContext, IFrameworkHandle? frameworkHandle)
         {
-            Debugger.Launch();
             if (tests == null || frameworkHandle == null) return;
 
             try

@@ -1,4 +1,6 @@
 using Autodesk.Revit.UI;
+using System.Diagnostics;
+using System.Reflection;
 
 namespace RevitTestFramework.Common;
 
@@ -45,7 +47,7 @@ public class RevitTask : IDisposable
         if (act == null)
             throw new ArgumentNullException(nameof(act));
 
-        return Run<object>(app =>
+        return Run<object?>(app =>
         {
             act(app);
             return null;
@@ -84,14 +86,24 @@ public class RevitTask : IDisposable
                 var resultType = funcType.GenericTypeArguments.Length > 1 ? funcType.GenericTypeArguments[1] : typeof(object);
                 var result = _func.DynamicInvoke(app);
                 var tcsType = typeof(TaskCompletionSource<>).MakeGenericType(resultType);
-                var trySetResult = tcsType.GetMethod("TrySetResult");
+                var trySetResult = tcsType.GetMethod("TrySetResult", new[] { resultType });
                 trySetResult?.Invoke(_tcs, new[] { result });
             }
             catch (Exception ex)
             {
                 var tcsType = _tcs.GetType();
-                var trySetException = tcsType.GetMethod("TrySetException");
-                trySetException?.Invoke(_tcs, new object[] { ex });
+                
+                try
+                {
+                    var trySetException = tcsType.GetMethod("TrySetException", new[] { typeof(Exception) });
+                    trySetException?.Invoke(_tcs, [ex]);
+                }
+                catch (Exception setEx)
+                {
+                    // If setting the exception fails, we can log it or handle it as needed.
+                    // This is a fallback to ensure we don't leave the TaskCompletionSource in an uncompleted state.
+                    Trace.WriteLine($"Failed to set exception on TaskCompletionSource: {setEx.Message}");
+                }
             }
             finally
             {
