@@ -445,27 +445,36 @@ public static class PipeClientHelper
     /// <param name="handleLine">Action to handle each line of response</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <param name="revitVersion">The Revit version to connect to</param>
-    public static void SendCommandStreaming(PipeCommand command, Action<string> handleLine, CancellationToken cancellationToken, string revitVersion)
-    {
-        SendCommandStreaming(command, handleLine, cancellationToken, revitVersion, null);
-    }
-
-    /// <summary>
-    /// Sends a streaming command using the new connection method with Revit version
-    /// </summary>
-    /// <param name="command">The pipe command to send</param>
-    /// <param name="handleLine">Action to handle each line of response</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <param name="revitVersion">The Revit version to connect to</param>
     /// <param name="logger">Optional logger for sending informational messages to test console</param>
     public static void SendCommandStreaming(PipeCommand command, Action<string> handleLine, CancellationToken cancellationToken, string revitVersion, ILogger? logger)
     {
         using var cancelServer = new NamedPipeServerStream(command.CancelPipe, PipeDirection.Out, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
         using var client = ConnectToRevit(revitVersion, logger);
         var json = JsonSerializer.Serialize(command);
-        using var sw = new StreamWriter(client, leaveOpen: true);
-        sw.WriteLine(json);
-        sw.Flush();
+        
+        // Create StreamWriter in a try-catch to handle disposal issues
+        StreamWriter? sw = null;
+        try
+        {
+            sw = new StreamWriter(client, leaveOpen: true);
+            sw.WriteLine(json);
+            sw.Flush();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Pipe was already closed, ignore disposal issues
+        }
+        finally
+        {
+            try
+            {
+                sw?.Dispose();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Ignore disposal exceptions when pipe is already closed
+            }
+        }
 
         _ = Task.Run(async () =>
         {
@@ -509,7 +518,6 @@ public static class PipeClientHelper
         catch (Exception ex)
         {
             Debug.WriteLine($"PipeClientHelper: Failed to create logger from framework handle: {ex.Message}");
-            SendCommandStreaming(command, handleLine, cancellationToken, revitVersion, null);
         }
     }
 

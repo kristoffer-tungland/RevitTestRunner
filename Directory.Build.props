@@ -39,11 +39,5 @@
     <IsTestProject>false</IsTestProject>
     <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
-
-  <!-- Properties for adapter projects and related that target .NET 9 -->
-  <PropertyGroup Condition="$(MSBuildProjectName) == 'RevitAdapterCommon' OR
-                            $(MSBuildProjectName) == 'RevitNUnitAdapter' OR
-                            $(MSBuildProjectName) == 'RevitXunitAdapter'">
-    <TargetFramework>net9.0</TargetFramework>
-  </PropertyGroup>
+  
 </Project>

@@ -5,30 +5,24 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <RevitVersion>2025</RevitVersion>
   </PropertyGroup>
   
   <ItemGroup>
-    <PackageReference Include="xunit" Version="2.9.3" />
+    <!--<PackageReference Include="xunit" Version="2.9.3" />-->
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*" />
   </ItemGroup>
   
   <ItemGroup>
-    <ProjectReference Include="..\RevitTestFramework.Xunit\RevitTestFramework.Xunit.csproj" />
     <ProjectReference Include="..\RevitTestFramework.Xunit.Contracts\RevitTestFramework.Xunit.Contracts.csproj" />
     <ProjectReference Include="..\RevitXunitAdapter\RevitXunitAdapter.csproj" />
   </ItemGroup>
-  
-  <!-- Copy test adapter assemblies to output -->
-  <Target Name="CopyTestAdapter" AfterTargets="Build">
-    <ItemGroup>
-      <TestAdapterFiles Include="..\RevitXunitAdapter\bin\$(Configuration)\net8.0\RevitXunit.TestAdapter.dll" />
-      <TestAdapterFiles Include="..\RevitAdapterCommon\bin\$(Configuration)\net8.0\RevitAdapterCommon.dll" />
-      <TestAdapterFiles Include="..\RevitTestFramework.Xunit\bin\$(Configuration)\net8.0\RevitTestFramework.Xunit.*.dll" />
-    </ItemGroup>
-    <Copy SourceFiles="@(TestAdapterFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" ContinueOnError="true" />
-    <Message Text="Copied @(TestAdapterFiles) to $(OutDir)" Importance="high" />
-  </Target>
-  
+    
   <!-- Include test settings -->
   <ItemGroup>
     <None Include="test.runsettings">

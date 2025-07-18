@@ -13,7 +13,6 @@
   <ItemGroup>
     <ProjectReference Include="..\RevitAddin.Common\RevitAddin.Common.csproj" />
     <ProjectReference Include="..\RevitTestFramework.Xunit\RevitTestFramework.Xunit.csproj" />
-    <ProjectReference Include="..\RevitTestFramework.Contracts\RevitTestFramework.Contracts.csproj" />
   </ItemGroup>
   
   <!-- Include installation script in the build output -->
@@ -23,26 +22,4 @@
     </None>
   </ItemGroup>
   
-  <!-- Copy the RevitTestFramework.Common.exe to the output directory to enable manifest generation -->
-  <Target Name="CopyRevitTestFrameworkCommon" AfterTargets="Build">
-    <ItemGroup>
-      <RevitCommonExe Include="..\RevitTestFramework.Common\bin\$(Configuration)\net8.0\RevitTestFramework.Common*.exe" />
-    </ItemGroup>
-    <Copy SourceFiles="@(RevitCommonExe)" DestinationFolder="$(OutDir)" ContinueOnError="true" />
-    <Message Text="Copied RevitTestFramework.Common.exe to output directory" Importance="high" />
-  </Target>
-  
-  <!-- Additional target to ensure all xUnit dependencies are copied -->
-  <Target Name="CopyXunitDependencies" AfterTargets="Build">
-    <ItemGroup>
-      <XunitDependencies Include="..\packages\**\xunit*.dll" />
-    </ItemGroup>
-    <Copy
-      SourceFiles="@(XunitDependencies)"
-      DestinationFolder="$(OutDir)"
-      SkipUnchangedFiles="true"
-      ContinueOnError="true"
-    />
-    <Message Text="Attempted to copy additional xUnit dependencies to output directory" Importance="high" />
-  </Target>
 </Project>

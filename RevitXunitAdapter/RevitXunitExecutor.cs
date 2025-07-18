@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel.Adapter;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 using RevitAdapterCommon;
 using RevitTestFramework.Contracts;
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace RevitXunitAdapter
@@ -14,6 +15,7 @@ namespace RevitXunitAdapter
 
         public void RunTests(IEnumerable<TestCase>? tests, IRunContext? runContext, IFrameworkHandle? frameworkHandle)
         {
+            Debugger.Launch();
             if (tests == null || frameworkHandle == null) return;
 
             try
