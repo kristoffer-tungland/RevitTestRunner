@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
 using Xunit.Abstractions;
 using Xunit.Sdk;
 using RevitTestFramework.Common;
@@ -148,14 +149,56 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
         ExceptionAggregator aggregator,
         CancellationTokenSource cancellationTokenSource)
     {
-        // Only inject document if we have one and the test method expects it
-        if (_document != null && testMethod.GetParameters().Length > testMethodArguments.Length)
+        var parameters = testMethod.GetParameters();
+        
+        // If the test method has no parameters, don't inject anything
+        if (parameters.Length == 0)
         {
-            var args = new object[testMethodArguments.Length + 1];
-            args[0] = _document;
-            if (testMethodArguments.Length > 0)
-                Array.Copy(testMethodArguments, 0, args, 1, testMethodArguments.Length);
-            testMethodArguments = args;
+            testMethodArguments = [];
+        }
+        else if (parameters.Length > testMethodArguments.Length)
+        {
+            // Build dynamic arguments based on parameter types
+            var args = new List<object?>();
+            
+            // Copy any existing arguments first
+            args.AddRange(testMethodArguments.Cast<object?>());
+            
+            // Inject required arguments based on parameter types
+            for (int i = testMethodArguments.Length; i < parameters.Length; i++)
+            {
+                var paramType = parameters[i].ParameterType;
+                var isNullable = paramType.IsGenericType && paramType.GetGenericTypeDefinition() == typeof(Nullable<>) ||
+                                !paramType.IsValueType;
+                
+                if (paramType == typeof(UIApplication))
+                {
+                    // Inject UIApplication from static infrastructure
+                    args.Add(RevitTestInfrastructure.UIApplication);
+                }
+                else if (paramType == typeof(Document) || 
+                        (paramType.IsGenericType && paramType.GetGenericTypeDefinition() == typeof(Nullable<>) && 
+                         Nullable.GetUnderlyingType(paramType) == typeof(Document)) ||
+                        (paramType == typeof(Document) && isNullable))
+                {
+                    // Inject document if available, or null for nullable Document parameters
+                    args.Add(_document);
+                }
+                else if (isNullable)
+                {
+                    // For other nullable parameters, inject null
+                    args.Add(null);
+                }
+                else
+                {
+                    // For non-nullable parameters we don't support, throw an exception
+                    throw new InvalidOperationException(
+                        $"Test method '{testMethod.Name}' has unsupported parameter type '{paramType.Name}' at position {i}. " +
+                        "Supported types are: UIApplication, Document, Document?");
+                }
+            }
+            
+            testMethodArguments = args.ToArray();
         }
 
         return new RevitUITestRunner(test, messageBus, testClass, constructorArguments,
@@ -174,10 +217,6 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
 {
     protected override async Task<decimal> InvokeTestMethodAsync(ExceptionAggregator aggregator)
     {        
-        // Wait for completion with timeout
-        //using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
-        //cts.Token.Register(() => tcs.TrySetCanceled());
-        
         try
         {
             Exception? exception = null;
@@ -192,7 +231,7 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
                     // Create test instance
                     var testInstance = Activator.CreateInstance(TestClass, ConstructorArguments);
 
-                    // Invoke the test method
+                    // Invoke the test method directly - no need for runtime argument injection
                     var result = TestMethod.Invoke(testInstance, TestMethodArguments);
 
                     // Handle async test methods
@@ -211,7 +250,6 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
                     exception = UnwrapException(ex);
                     return timer.ElapsedMilliseconds;
                 }
-
             });
 
             // If the test method threw an exception, it will be in the handler

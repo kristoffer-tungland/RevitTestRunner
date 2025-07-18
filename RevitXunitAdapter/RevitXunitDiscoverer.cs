@@ -1,9 +1,9 @@
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Adapter;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
-using RevitTestFramework.Xunit;
 using System.Reflection;
 using System.Linq;
+using RevitTestFramework.Xunit;
 
 namespace RevitXunitAdapter
 {
@@ -91,7 +91,7 @@ namespace RevitXunitAdapter
                         var tc = new TestCase($"{type.FullName}.{method.Name}", new Uri("executor://RevitXunitExecutor"), source);
                         
                         // Add traits/properties if available
-                        var revitTestAttr = method.GetCustomAttribute<RevitXunitTestModelAttribute>();
+                        var revitTestAttr = method.GetCustomAttribute<RevitFactAttribute>();
                         if (revitTestAttr != null)
                         {
                             tc.Traits.Add(new Trait("Category", "RevitTest"));
@@ -131,7 +131,7 @@ namespace RevitXunitAdapter
         {
             var hasXunitFact = method.GetCustomAttributes(typeof(Xunit.FactAttribute), true).Any();
             var hasXunitTheory = method.GetCustomAttributes(typeof(Xunit.TheoryAttribute), true).Any();
-            var hasRevitAttr = method.GetCustomAttributes(typeof(RevitXunitTestModelAttribute), true).Any();
+            var hasRevitAttr = method.GetCustomAttributes(typeof(RevitFactAttribute), true).Any();
             
             return hasXunitFact || hasXunitTheory || hasRevitAttr;
         }

@@ -9,16 +9,21 @@ namespace RevitTestFramework.Common;
 public static class RevitTestInfrastructure
 {
     private static RevitTask? _revitTask;
+    private static UIApplication? _uiApplication;
 
     public static RevitTask RevitTask { get => _revitTask ?? throw new InvalidOperationException("RevitTask is not initialized. Call Setup first."); }
+    
+    public static UIApplication UIApplication { get => _uiApplication ?? throw new InvalidOperationException("UIApplication is not initialized. Call Setup first."); }
 
     public static void Setup(UIApplication uiApp)
     {
+        _uiApplication = uiApp;
         _revitTask = new RevitTask();
     }
 
     public static void Dispose()
     {
         _revitTask?.Dispose();
+        _uiApplication = null;
     }
 }
