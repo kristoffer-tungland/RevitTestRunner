@@ -5,9 +5,6 @@
 param(
     [Parameter(Position=0)]
     [string]$AssemblyPath,
-
-    [Parameter()]
-    [string]$RevitVersion,
     
     [Parameter()]
     [string]$OutputDir
@@ -38,19 +35,15 @@ if ($versionMatches.Success) {
     Write-Host "Extracted assembly version from filename: $assemblyVersion"
     
     # Extract Revit version from assembly version (first part)
-    if ([string]::IsNullOrEmpty($RevitVersion)) {
-        $RevitVersion = $assemblyVersion.Split('.')[0]
-        Write-Host "Extracted Revit version from assembly version: $RevitVersion"
-    }
+    $RevitVersion = $assemblyVersion.Split('.')[0]
+    Write-Host "Extracted Revit version from assembly version: $RevitVersion"
 } else {
     Write-Warning "Could not parse version from assembly name '$assemblyName'"
     Write-Warning "Expected format: RevitAddin.Xunit.YYYY.M.P (e.g., RevitAddin.Xunit.2025.0.0)"
     
     # Ultimate fallback
     $assemblyVersion = "2025.0.0"
-    if ([string]::IsNullOrEmpty($RevitVersion)) {
-        $RevitVersion = "2025"
-    }
+    $RevitVersion = "2025"
     Write-Host "Using default assembly version: $assemblyVersion"
     Write-Host "Using default Revit version: $RevitVersion"
 }
@@ -99,7 +92,7 @@ if ($commonExeFiles.Count -gt 0) {
     $installedAssemblyPath = Join-Path $OutputDir ([System.IO.Path]::GetFileName($AssemblyPath))
     
     Write-Host "Generating addin manifest using RevitTestFramework.Common..."
-    $manifestToolCommand = "& '$commonExePath' generate-xunit-manifest --output '$addinDir' --assembly '$installedAssemblyPath' --assembly-version '$assemblyVersion'"
+    $manifestToolCommand = "& '$commonExePath' generate-manifest --output '$addinDir' --assembly '$installedAssemblyPath' --assembly-version '$assemblyVersion'"
     
     Write-Host "Running: $manifestToolCommand"
     Invoke-Expression $manifestToolCommand
@@ -111,8 +104,8 @@ if ($commonExeFiles.Count -gt 0) {
     }
 } else {
     Write-Warning "RevitTestFramework.Common.exe not found in $scriptDir. Addin manifest will not be generated."
-    Write-Warning "To generate the addin manifest, run RevitTestFramework.Common.exe manually:"
-    Write-Warning "RevitTestFramework.Common.exe generate-xunit-manifest --assembly '$AssemblyPath' --assembly-version '$assemblyVersion'"
+    Write-Warning "To generate the addin manifest, run RevitTestFramework.Common.exe manually:
+    Write-Warning "RevitTestFramework.Common.exe generate-manifest --assembly '$AssemblyPath' --assembly-version '$assemblyVersion'"
 }
 
 Write-Host "Installation completed successfully." -ForegroundColor Green

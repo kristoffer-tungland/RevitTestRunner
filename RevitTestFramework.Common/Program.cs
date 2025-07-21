@@ -11,10 +11,11 @@ namespace RevitTestFramework.Common
                 if (args.Length == 0)
                 {
                     Console.WriteLine("Usage: RevitTestFramework.Common.exe <command> [options]");
-                    Console.WriteLine("Commands: generate-xunit-manifest, generate-nunit-manifest, generate-all-manifests");
+                    Console.WriteLine("Commands:");
+                    Console.WriteLine("  generate-manifest         Generate Xunit addin manifest");
                     Console.WriteLine("Options:");
                     Console.WriteLine("  --output <path>           Output directory (default: %APPDATA%\\Autodesk\\Revit\\Addins\\<RevitVersion>)");
-                    Console.WriteLine("  --assembly <path>         Path to assembly file");
+                    Console.WriteLine("  --assembly <path>         Path to assembly file (optional)");
                     Console.WriteLine("  --assembly-version <ver>  Assembly version to use (default: extracted from current assembly)");
                     Console.WriteLine("  --fixed-guids <bool>      Use fixed GUIDs (default: true)");
                     return 0;
@@ -47,31 +48,18 @@ namespace RevitTestFramework.Common
                 string outputDir = GetOptionOrDefault(options, "output", GetDefaultOutputDir(revitVersion));
                 bool useFixedGuids = GetOptionOrDefault(options, "fixed-guids", "true") != "false";
 
-                // Process command
-                if (command == "generate-xunit-manifest")
+                // Process command - simplified to only support Xunit
+                if (command == "generate-manifest" || command == "generate-xunit-manifest")
                 {
                     string? assemblyPath = GetOptionOrDefault(options, "assembly", null);
                     AddinManifestTool.GenerateXunitAddinManifest(outputDir, assemblyPath, useFixedGuids, assemblyVersion);
                     Console.WriteLine("Xunit manifest generated successfully.");
                     return 0;
                 }
-                else if (command == "generate-nunit-manifest")
-                {
-                    string? assemblyPath = GetOptionOrDefault(options, "assembly", null);
-                    AddinManifestTool.GenerateNUnitAddinManifest(outputDir, assemblyPath, useFixedGuids, assemblyVersion);
-                    Console.WriteLine("NUnit manifest generated successfully.");
-                    return 0;
-                }
-                else if (command == "generate-all-manifests")
-                {
-                    AddinManifestTool.GenerateXunitAddinManifest(outputDir, null, useFixedGuids, assemblyVersion);
-                    AddinManifestTool.GenerateNUnitAddinManifest(outputDir, null, useFixedGuids, assemblyVersion);
-                    Console.WriteLine("All manifests generated successfully.");
-                    return 0;
-                }
                 else
                 {
                     Console.WriteLine($"Unknown command: {command}");
+                    Console.WriteLine("Available commands: generate-manifest");
                     return 1;
                 }
             }
