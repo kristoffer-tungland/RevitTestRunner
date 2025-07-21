@@ -1,13 +1,10 @@
 # RevitAddin.Xunit Installation Script
-# This script installs the RevitAddin.Xunit component to ProgramData for use with Revit
-# It extracts assembly version from the assembly filename (format: RevitAddin.Xunit.2025.0.0.dll)
+# This script generates the Revit addin manifest for RevitAddin.Xunit
+# File installation is handled by RevitTestFramework.Common.exe
 
 param(
     [Parameter(Position=0)]
-    [string]$AssemblyPath,
-    
-    [Parameter()]
-    [string]$OutputDir
+    [string]$AssemblyPath
 )
 
 # If no assembly path is provided, use the script directory to locate the assembly
@@ -48,34 +45,6 @@ if ($versionMatches.Success) {
     Write-Host "Using default Revit version: $RevitVersion"
 }
 
-# Set output directory
-if ([string]::IsNullOrEmpty($OutputDir)) {
-    $OutputDir = Join-Path $env:ProgramData "Autodesk\RVT $RevitVersion\RevitTestRunner\$assemblyVersion"
-}
-
-Write-Host "Installing RevitAddin.Xunit to $OutputDir"
-
-# Ensure output directory exists
-if (-not (Test-Path $OutputDir)) {
-    New-Item -Path $OutputDir -ItemType Directory -Force | Out-Null
-    Write-Host "Created directory: $OutputDir"
-}
-
-# Copy the assembly
-Copy-Item -Path $AssemblyPath -Destination $OutputDir -Force
-Write-Host "Copied: $([System.IO.Path]::GetFileName($AssemblyPath)) -> $OutputDir"
-
-# Copy dependencies from the same directory
-$assemblyDir = [System.IO.Path]::GetDirectoryName($AssemblyPath)
-$dependencies = Get-ChildItem -Path $assemblyDir -Filter "*.dll" | 
-                Where-Object { $_.FullName -ne $AssemblyPath }
-
-foreach ($dep in $dependencies) {
-    $destPath = Join-Path $OutputDir $dep.Name
-    Copy-Item -Path $dep.FullName -Destination $destPath -Force
-    Write-Host "Copied dependency: $($dep.Name) -> $destPath"
-}
-
 # Look for RevitTestFramework.Common.exe in the script directory
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $commonExeFiles = Get-ChildItem -Path $scriptDir -Filter "RevitTestFramework.Common*.exe"
@@ -83,30 +52,27 @@ $commonExeFiles = Get-ChildItem -Path $scriptDir -Filter "RevitTestFramework.Com
 if ($commonExeFiles.Count -gt 0) {
     $commonExePath = $commonExeFiles[0].FullName
     
-    # Generate addin manifest
+    # Generate addin manifest (RevitTestFramework.Common.exe handles all file installation)
     $addinDir = Join-Path $env:AppData "Autodesk\Revit\Addins\$RevitVersion"
     if (-not (Test-Path $addinDir)) {
         New-Item -Path $addinDir -ItemType Directory -Force | Out-Null
     }
-
-    $installedAssemblyPath = Join-Path $OutputDir ([System.IO.Path]::GetFileName($AssemblyPath))
     
-    Write-Host "Generating addin manifest using RevitTestFramework.Common..."
-    $manifestToolCommand = "& '$commonExePath' generate-manifest --output '$addinDir' --assembly '$installedAssemblyPath' --assembly-version '$assemblyVersion'"
+    Write-Host "Generating addin manifest and installing files using RevitTestFramework.Common..."
+    $manifestToolCommand = "& '$commonExePath' generate-manifest --output '$addinDir' --assembly '$AssemblyPath' --assembly-version '$assemblyVersion'"
     
     Write-Host "Running: $manifestToolCommand"
     Invoke-Expression $manifestToolCommand
     
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "Successfully generated addin manifest in $addinDir" -ForegroundColor Green
+        Write-Host "Successfully generated addin manifest and installed files" -ForegroundColor Green
     } else {
         Write-Error "Failed to generate addin manifest. Exit code: $LASTEXITCODE"
     }
 } else {
     Write-Warning "RevitTestFramework.Common.exe not found in $scriptDir. Addin manifest will not be generated."
-    Write-Warning "To generate the addin manifest, run RevitTestFramework.Common.exe manually:
+    Write-Warning "To generate the addin manifest, run RevitTestFramework.Common.exe manually:"
     Write-Warning "RevitTestFramework.Common.exe generate-manifest --assembly '$AssemblyPath' --assembly-version '$assemblyVersion'"
 }
 
 Write-Host "Installation completed successfully." -ForegroundColor Green
-Write-Host "RevitAddin.Xunit installed to: $OutputDir"
