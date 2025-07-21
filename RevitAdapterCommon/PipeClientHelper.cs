@@ -222,11 +222,10 @@ public static class PipeClientHelper
     /// Waits for the Revit process to initialize its test infrastructure and become available for pipe connections
     /// </summary>
     /// <param name="revitProcess">The Revit process to wait for</param>
-    /// <param name="revitVersion">The Revit version</param>
     /// <param name="logger">Optional logger for sending informational messages</param>
     /// <param name="maxWaitTimeMs">Maximum time to wait in milliseconds</param>
     /// <returns>True if the pipe becomes available, false if timeout occurs</returns>
-    private static bool WaitForRevitPipeAvailability(Process revitProcess, string revitVersion, ILogger? logger, int maxWaitTimeMs = 60000)
+    private static bool WaitForRevitPipeAvailability(Process revitProcess, ILogger? logger, int maxWaitTimeMs = 60000)
     {
         logger?.LogInformation("PipeClientHelper: Waiting for Revit test infrastructure to initialize...");
         
@@ -246,8 +245,8 @@ public static class PipeClientHelper
                 // Try to construct the pipe name for this process
                 var assembly = System.Reflection.Assembly.GetExecutingAssembly();
                 var version = assembly.GetName().Version;
-                var assemblyVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0";
-                var pipeName = PipeNaming.GetPipeName(revitVersion, assemblyVersion, revitProcess.Id);
+                var assemblyVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "2025.0.0";
+                var pipeName = PipeNaming.GetPipeName(assemblyVersion, revitProcess.Id);
 
                 logger?.LogInformation($"PipeClientHelper: Checking for pipe availability: '{pipeName}'");
 
@@ -276,9 +275,9 @@ public static class PipeClientHelper
     }
 
     /// <summary>
-    /// Connects to a Revit process using the new pipe naming format (Revit version + assembly version + process ID based)
+    /// Connects to a Revit process using the new pipe naming format (assembly version + process ID based)
     /// </summary>
-    /// <param name="revitVersion">The Revit version to connect to</param>
+    /// <param name="revitVersion">The Revit version to connect to (used for process selection)</param>
     /// <returns>Connected NamedPipeClientStream</returns>
     public static NamedPipeClientStream ConnectToRevit(string revitVersion)
     {
@@ -286,10 +285,10 @@ public static class PipeClientHelper
     }
 
     /// <summary>
-    /// Connects to a Revit process using the new pipe naming format (Revit version + assembly version + process ID based)
+    /// Connects to a Revit process using the new pipe naming format (assembly version + process ID based)
     /// If no running Revit process is found, launches a new hidden instance.
     /// </summary>
-    /// <param name="revitVersion">The Revit version to connect to</param>
+    /// <param name="revitVersion">The Revit version to connect to (used for process selection)</param>
     /// <param name="logger">Optional logger for sending informational messages to test console</param>
     /// <returns>Connected NamedPipeClientStream</returns>
     public static NamedPipeClientStream ConnectToRevit(string revitVersion, ILogger? logger)
@@ -307,22 +306,10 @@ public static class PipeClientHelper
             try
             {
                 // Try with the current assembly version and the specific process ID
-                var pipeName = PipeNaming.GetCurrentProcessPipeName(revitVersion);
-                // Replace the current process ID with the target Revit process ID
-                var parts = pipeName.Split('_');
-                if (parts.Length >= 4)
-                {
-                    parts[3] = proc.Id.ToString();
-                    pipeName = string.Join("_", parts);
-                }
-                else
-                {
-                    // Fallback: construct the pipe name directly
-                    var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                    var version = assembly.GetName().Version;
-                    var assemblyVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0";
-                    pipeName = PipeNaming.GetPipeName(revitVersion, assemblyVersion, proc.Id);
-                }
+                var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+                var version = assembly.GetName().Version;
+                var assemblyVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "2025.0.0";
+                var pipeName = PipeNaming.GetPipeName(assemblyVersion, proc.Id);
 
                 logger?.LogInformation($"PipeClientHelper: Trying to connect to pipe: '{pipeName}'");
 
@@ -357,7 +344,7 @@ public static class PipeClientHelper
             var newRevitProcess = LaunchHiddenRevit(revitVersion, logger);
             
             // Wait for the test infrastructure to be ready
-            if (!WaitForRevitPipeAvailability(newRevitProcess, revitVersion, logger))
+            if (!WaitForRevitPipeAvailability(newRevitProcess, logger))
             {
                 newRevitProcess.Kill();
                 throw new InvalidOperationException("Revit test infrastructure failed to initialize within the timeout period");
@@ -366,8 +353,8 @@ public static class PipeClientHelper
             // Now try to connect to the new process
             var assembly = System.Reflection.Assembly.GetExecutingAssembly();
             var version = assembly.GetName().Version;
-            var assemblyVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0";
-            var pipeName = PipeNaming.GetPipeName(revitVersion, assemblyVersion, newRevitProcess.Id);
+            var assemblyVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "2025.0.0";
+            var pipeName = PipeNaming.GetPipeName(assemblyVersion, newRevitProcess.Id);
 
             logger?.LogInformation($"PipeClientHelper: Connecting to newly launched Revit via pipe: '{pipeName}'");
 

@@ -17,27 +17,33 @@ public static class AddinManifestTool
     /// <param name="outputDirectory">Directory where to save the addin manifest file</param>
     /// <param name="assemblyPath">Path to the RevitAddin.Xunit assembly</param>
     /// <param name="useFixedGuids">Whether to use fixed GUIDs for consistent identification</param>
-    /// <param name="packageVersion">Version to use for side-loading (determines GUID and output path)</param>
+    /// <param name="assemblyVersion">Assembly version to use (if null, extracts from assembly). Format: RevitVersion.Minor.Patch (e.g., "2025.0.0")</param>
     public static void GenerateXunitAddinManifest(
         string outputDirectory, 
         string? assemblyPath = null,
         bool useFixedGuids = true,
-        string packageVersion = "1.0.0")
+        string? assemblyVersion = null)
     {
         assemblyPath = FindAssemblyPath(assemblyPath, "RevitAddin.Xunit.dll");
         
+        // Get assembly version from the assembly if not provided
+        if (string.IsNullOrEmpty(assemblyVersion))
+        {
+            assemblyVersion = GetAssemblyVersion(assemblyPath);
+        }
+        
         // Create version-specific directory and copy assemblies
-        string versionedOutputDir = Path.Combine(outputDirectory, $"RevitTestFramework.v{packageVersion}");
+        string versionedOutputDir = Path.Combine(outputDirectory, $"RevitTestFramework.v{assemblyVersion}");
         Directory.CreateDirectory(versionedOutputDir);
         
         // Copy the assembly and its dependencies to the versioned output directory
         string versionedAssemblyPath = CopyAssemblyWithDependencies(assemblyPath, versionedOutputDir);
         
-        string addinName = $"RevitTestFramework Xunit v{packageVersion}";
+        string addinName = $"RevitTestFramework Xunit v{assemblyVersion}";
         
         // Generate version-specific GUID
         Guid versionSpecificGuid = useFixedGuids ? 
-            GenerateVersionSpecificGuid(XunitBaseGuid, packageVersion) : 
+            GenerateVersionSpecificGuid(XunitBaseGuid, assemblyVersion) : 
             Guid.NewGuid();
 
         RevitAddInManifestGenerator.GenerateAddinManifest(
@@ -47,7 +53,7 @@ public static class AddinManifestTool
             "RevitTestFramework",
             addinName,
             versionSpecificGuid,
-            packageVersion
+            assemblyVersion
         );
     }
 
@@ -57,27 +63,33 @@ public static class AddinManifestTool
     /// <param name="outputDirectory">Directory where to save the addin manifest file</param>
     /// <param name="assemblyPath">Path to the RevitAddin.NUnit assembly</param>
     /// <param name="useFixedGuids">Whether to use fixed GUIDs for consistent identification</param>
-    /// <param name="packageVersion">Version to use for side-loading (determines GUID and output path)</param>
+    /// <param name="assemblyVersion">Assembly version to use (if null, extracts from assembly). Format: RevitVersion.Minor.Patch (e.g., "2025.0.0")</param>
     public static void GenerateNUnitAddinManifest(
         string outputDirectory, 
         string? assemblyPath = null,
         bool useFixedGuids = true,
-        string packageVersion = "1.0.0")
+        string? assemblyVersion = null)
     {
         assemblyPath = FindAssemblyPath(assemblyPath, "RevitAddin.NUnit.dll");
         
+        // Get assembly version from the assembly if not provided
+        if (string.IsNullOrEmpty(assemblyVersion))
+        {
+            assemblyVersion = GetAssemblyVersion(assemblyPath);
+        }
+        
         // Create version-specific directory and copy assemblies
-        string versionedOutputDir = Path.Combine(outputDirectory, $"RevitTestFramework.v{packageVersion}");
+        string versionedOutputDir = Path.Combine(outputDirectory, $"RevitTestFramework.v{assemblyVersion}");
         Directory.CreateDirectory(versionedOutputDir);
         
         // Copy the assembly and its dependencies to the versioned output directory
         string versionedAssemblyPath = CopyAssemblyWithDependencies(assemblyPath, versionedOutputDir);
         
-        string addinName = $"RevitTestFramework NUnit v{packageVersion}";
+        string addinName = $"RevitTestFramework NUnit v{assemblyVersion}";
         
         // Generate version-specific GUID
         Guid versionSpecificGuid = useFixedGuids ? 
-            GenerateVersionSpecificGuid(NUnitBaseGuid, packageVersion) : 
+            GenerateVersionSpecificGuid(NUnitBaseGuid, assemblyVersion) : 
             Guid.NewGuid();
         
         RevitAddInManifestGenerator.GenerateAddinManifest(
@@ -87,8 +99,28 @@ public static class AddinManifestTool
             "RevitTestFramework",
             addinName,
             versionSpecificGuid,
-            packageVersion
+            assemblyVersion
         );
+    }
+
+    /// <summary>
+    /// Gets the assembly version from an assembly file
+    /// </summary>
+    /// <param name="assemblyPath">Path to the assembly</param>
+    /// <returns>The formatted assembly version (e.g., "2025.0.0")</returns>
+    private static string GetAssemblyVersion(string assemblyPath)
+    {
+        try
+        {
+            var assembly = Assembly.LoadFrom(assemblyPath);
+            var version = assembly.GetName().Version;
+            return version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "2025.0.0";
+        }
+        catch
+        {
+            // Fallback to default version if assembly cannot be loaded
+            return "2025.0.0";
+        }
     }
 
     /// <summary>
@@ -161,10 +193,20 @@ public static class AddinManifestTool
         string? currentDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
         if (currentDir != null)
         {
+            // First try exact match
             string potentialPath = Path.Combine(currentDir, assemblyName);
             if (File.Exists(potentialPath))
             {
                 return potentialPath;
+            }
+
+            // Try to find versioned assembly (e.g., RevitAddin.Xunit.2025.0.0.dll when looking for RevitAddin.Xunit.dll)
+            string baseAssemblyName = Path.GetFileNameWithoutExtension(assemblyName);
+            string[] versionedAssemblies = Directory.GetFiles(currentDir, $"{baseAssemblyName}.*.dll");
+            if (versionedAssemblies.Length > 0)
+            {
+                // Return the first match (could be improved to select latest version)
+                return versionedAssemblies[0];
             }
             
             // Look up one directory and check bin folders
@@ -186,6 +228,20 @@ public static class AddinManifestTool
                     if (File.Exists(location))
                     {
                         return location;
+                    }
+                }
+
+                // Also try to find versioned assemblies in bin folders
+                foreach (var binPath in new[] { "bin/Debug/net8.0", "bin/Release/net8.0", "bin/Debug/net9.0", "bin/Release/net9.0" })
+                {
+                    string binDir = Path.Combine(parentDir, projectName, binPath);
+                    if (Directory.Exists(binDir))
+                    {
+                        string[] versionedBinAssemblies = Directory.GetFiles(binDir, $"{baseAssemblyName}.*.dll");
+                        if (versionedBinAssemblies.Length > 0)
+                        {
+                            return versionedBinAssemblies[0];
+                        }
                     }
                 }
             }

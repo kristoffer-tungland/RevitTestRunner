@@ -30,12 +30,14 @@ public static partial class RevitAddInManifestGenerator
         string assemblyFullPath = Path.GetFullPath(assemblyPath);
         string assemblyFileName = Path.GetFileName(assemblyPath);
         
-        // Extract base name without version and extension
+        // Extract base name without extension (e.g., "RevitAddin.Xunit.2025.0.0" from "RevitAddin.Xunit.2025.0.0.dll")
         string baseClassName = Path.GetFileNameWithoutExtension(assemblyFileName);
-        baseClassName = ManifestVersionSuffixRegex().Replace(baseClassName, ""); // Remove version suffix if present
         
-        // Include version in manifest filename
-        string manifestPath = Path.Combine(outputPath, $"{baseClassName}.v{version}.addin");
+        // Remove version suffix from the base class name for cleaner namespace (e.g., "RevitAddin.Xunit")
+        string cleanBaseClassName = AssemblyVersionSuffixRegex().Replace(baseClassName, "");
+        
+        // Use the full assembly name (including version) for the manifest filename
+        string manifestPath = Path.Combine(outputPath, $"{baseClassName}.addin");
 
         // Create or use provided GUID for the add-in
         var addinAppId = appGuid ?? Guid.NewGuid();
@@ -65,12 +67,9 @@ public static partial class RevitAddInManifestGenerator
         appAssembly.InnerText = assemblyFullPath;
         addInApplication.AppendChild(appAssembly);  
 
-        // Extract the proper namespace from the assembly name - remove any version components
-        // First extract the base namespace (e.g., "RevitAddin.Xunit" from "RevitAddin.Xunit.2025.1.0.0")
-        string namespaceName = AssemblyVersionSuffixRegex().Replace(baseClassName, "");
-        
+        // Use the clean base class name as the namespace (e.g., "RevitAddin.Xunit")
         var appFullClassName = doc.CreateElement("FullClassName");
-        appFullClassName.InnerText = $"{namespaceName}.{applicationClassName}";
+        appFullClassName.InnerText = $"{cleanBaseClassName}.{applicationClassName}";
         addInApplication.AppendChild(appFullClassName);
 
         var appVendorId = doc.CreateElement("VendorId");
@@ -90,7 +89,7 @@ public static partial class RevitAddInManifestGenerator
         Console.WriteLine($"Created addin manifest at {manifestPath}");
     }
 
-    [GeneratedRegex(@"\.\d{4}(\.\d+\.\d+\.\d+)?")]
+    [GeneratedRegex(@"\.\d{4}\.\d+\.\d+")]
     private static partial Regex AssemblyVersionSuffixRegex();
 
     [GeneratedRegex(@"\.v\d+\.\d+\.\d+")]

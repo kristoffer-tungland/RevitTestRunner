@@ -12,7 +12,7 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>RevitXunit.TestAdapter</PackageId>
-    <PackageVersion>1.0.0</PackageVersion>
+    <PackageVersion>$(RevitVersion).0.0</PackageVersion>
     <Title>Revit XUnit Test Adapter</Title>
     <Description>Test adapter for running XUnit tests in Autodesk Revit</Description>
     <Authors>Your Name</Authors>

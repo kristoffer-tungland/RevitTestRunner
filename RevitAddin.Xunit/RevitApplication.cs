@@ -16,9 +16,6 @@ public class RevitApplication : IExternalApplication
     {
         try
         {
-#if DEBUG
-            Debugger.Launch();
-#endif
             // Register assembly resolution handler
             AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
 
@@ -32,7 +29,7 @@ public class RevitApplication : IExternalApplication
 
             // Use RevitTask to manage UI thread execution
             _revitTask = new RevitTask();
-            var pipeName = PipeNaming.GetCurrentProcessPipeName(revitVersion);
+            var pipeName = PipeNaming.GetCurrentProcessPipeName();
             Trace.WriteLine($"RevitAddin.Xunit using pipe name: {pipeName}");
             
             _server = new PipeServer(pipeName, _revitTask, path => new XunitTestAssemblyLoadContext(path));
