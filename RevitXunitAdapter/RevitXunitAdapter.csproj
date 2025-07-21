@@ -14,10 +14,13 @@
     <PackageId>RevitXunit.TestAdapter</PackageId>
     <PackageVersion>$(RevitVersion).0.0</PackageVersion>
     <Title>Revit XUnit Test Adapter</Title>
-    <Description>Test adapter for running XUnit tests in Autodesk Revit</Description>
-    <Authors>Your Name</Authors>
-    <Company>Your Company</Company>
-    <PackageTags>revit;xunit;testing;adapter</PackageTags>
+    <Description>Test adapter for running XUnit tests in Autodesk Revit. Enables seamless integration testing of Revit add-ins with automatic model loading, full API access, and Visual Studio Test Explorer integration.</Description>
+    <Authors>Kristoffer Tungland</Authors>
+    <PackageTags>revit;xunit;testing;adapter;bim;autodesk;integration-testing</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/kristoffer-tungland/RevitTestRunner</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/kristoffer-tungland/RevitTestRunner</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     
     <!-- Package configuration -->
     <IncludeBuildOutput>true</IncludeBuildOutput>
@@ -46,6 +49,11 @@
     <ProjectReference Include="..\RevitTestFramework.Xunit.Contracts\RevitTestFramework.Xunit.Contracts.csproj">
       <PrivateAssets>all</PrivateAssets>
     </ProjectReference>
+  </ItemGroup>
+
+  <!-- Include README in NuGet package -->
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <!-- Manually include files in both build and lib folders -->

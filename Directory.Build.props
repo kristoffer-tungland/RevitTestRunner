@@ -39,8 +39,8 @@
   
   <!-- Properties for test framework projects -->
   <PropertyGroup Condition="'$(IsRevitFrameworkProject)' == 'true' AND $(MSBuildProjectName.StartsWith('RevitTestFramework.'))">
-    <IsTestProject>false</IsTestProject>
     <PlatformTarget>x64</PlatformTarget>
+    <IsTestProject>false</IsTestProject>
   </PropertyGroup>
   
 </Project>
