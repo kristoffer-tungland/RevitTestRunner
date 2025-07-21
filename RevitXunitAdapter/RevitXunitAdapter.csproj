@@ -19,27 +19,42 @@
     <Company>Your Company</Company>
     <PackageTags>revit;xunit;testing;adapter</PackageTags>
     
-    <!-- Package the adapter for NuGet -->
-    <IncludeBuildOutput>false</IncludeBuildOutput>
-    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <!-- Package configuration -->
+    <IncludeBuildOutput>true</IncludeBuildOutput>
+    <BuildOutputTargetFolder>build\$(TargetFramework)</BuildOutputTargetFolder>
+    <!-- Allow xunit to be included as a dependency for consumers -->
+    <SuppressDependenciesWhenPacking>false</SuppressDependenciesWhenPacking>
   </PropertyGroup>
   
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <!-- Test adapter dependencies - private assets so they don't become NuGet dependencies -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="xunit.runner.utility" Version="2.9.3">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    
+    <!-- xunit dependency for consumers - this will be included as a NuGet dependency -->
     <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.utility" Version="2.9.3" />
   </ItemGroup>
   
   <ItemGroup>
-    <ProjectReference Include="..\RevitAdapterCommon\RevitAdapterCommon.csproj" />
-    <ProjectReference Include="..\RevitTestFramework.Xunit.Contracts\RevitTestFramework.Xunit.Contracts.csproj" />
+    <ProjectReference Include="..\RevitAdapterCommon\RevitAdapterCommon.csproj">
+      <PrivateAssets>all</PrivateAssets>
+    </ProjectReference>
+    <ProjectReference Include="..\RevitTestFramework.Xunit.Contracts\RevitTestFramework.Xunit.Contracts.csproj">
+      <PrivateAssets>all</PrivateAssets>
+    </ProjectReference>
   </ItemGroup>
 
-  <!-- Package the test adapter files correctly for NuGet -->
+  <!-- Manually include files in both build and lib folders -->
   <ItemGroup>
-    <None Include="$(OutputPath)\RevitXunit.TestAdapter.dll" Pack="true" PackagePath="build\net8.0\RevitXunit.TestAdapter.dll" />
-    <None Include="$(OutputPath)\RevitAdapterCommon.dll" Pack="true" PackagePath="build\net8.0\RevitAdapterCommon.dll" />
-    <None Include="$(OutputPath)\RevitTestFramework.Xunit.*.dll" Pack="true" PackagePath="build\net8.0\" />
+    <!-- Files for build folder (test adapter runtime) -->
+    <None Include="$(OutputPath)RevitTestFramework.Contracts.dll" Pack="true" PackagePath="build\$(TargetFramework)\$(TargetFramework)\RevitTestFramework.Contracts.dll" />
+    
+    <!-- Assemblies in lib folder (consumer reference) -->
+    <None Include="$(OutputPath)RevitTestFramework.Xunit.Contracts.dll" Pack="true" PackagePath="lib\$(TargetFramework)\RevitTestFramework.Xunit.Contracts.dll" />
   </ItemGroup>
 
 </Project>
