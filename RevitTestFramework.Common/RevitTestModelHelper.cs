@@ -52,12 +52,23 @@ public static class RevitTestModelHelper
     {
         try
         {
-            if (!File.Exists(localPath))
+            var primaryVersionNumber = uiApp.Application.VersionNumber;
+            
+            // Replace [RevitVersion] placeholder with actual version number
+            var resolvedPath = localPath.Replace("[RevitVersion]", primaryVersionNumber);
+            
+            Debug.WriteLine($"Original path: {localPath}");
+            if (resolvedPath != localPath)
             {
-                throw new FileNotFoundException($"Revit model file not found at path: {localPath}");
+                Debug.WriteLine($"Resolved path: {resolvedPath}");
             }
 
-            var modelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(localPath);
+            if (!File.Exists(resolvedPath))
+            {
+                throw new FileNotFoundException($"Revit model file not found at path: {resolvedPath}");
+            }
+
+            var modelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(resolvedPath);
             var app = uiApp.Application;
 
             var opts = new OpenOptions();
@@ -65,12 +76,12 @@ public static class RevitTestModelHelper
             opts.SetOpenWorksetsConfiguration(new WorksetConfiguration(WorksetConfigurationOption.CloseAllWorksets));
             opts.Audit = false;
 
-            Debug.WriteLine($"Opening local model: {localPath}");
+            Debug.WriteLine($"Opening local model: {resolvedPath}");
             var doc = app.OpenDocumentFile(modelPath, opts);
 
             if (doc == null)
             {
-                throw new InvalidOperationException($"Revit returned null document when opening local model at: {localPath}");
+                throw new InvalidOperationException($"Revit returned null document when opening local model at: {resolvedPath}");
             }
 
             Debug.WriteLine($"Successfully opened local model: {doc.Title}");

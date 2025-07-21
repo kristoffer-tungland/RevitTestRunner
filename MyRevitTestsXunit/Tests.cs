@@ -8,7 +8,7 @@ namespace MyRevitTestsXunit;
 public class MyRevitTestsClass
 {
     [RevitFact("proj-guid", "model-guid")]
-    public void TestWalls(Document doc)
+    public void TestCloudModel(Document doc)
     {
         Assert.NotNull(doc);
     }
@@ -49,6 +49,14 @@ public class MyRevitTestsClass
             .GetElementCount();
 
         Assert.True(wallsCount > 0, "Expected at least one wall in the model.");
+    }
+
+    [RevitFact(@"C:\Program Files\Autodesk\Revit [RevitVersion]\Samples\Snowdon Towers Sample Architectural.rvt")]
+    public void TestVersionPlaceholderWithDifferentModel(Document doc)
+    {
+        Assert.NotNull(doc);
+        // This test demonstrates the [RevitVersion] placeholder working with different sample files
+        // The placeholder will be replaced with the actual Revit version at runtime
     }
 
     [RevitFact]
