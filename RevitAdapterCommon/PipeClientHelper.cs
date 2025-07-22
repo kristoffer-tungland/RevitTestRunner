@@ -136,6 +136,12 @@ public static class PipeClientHelper
     /// </summary>
     private static readonly HashSet<int> _launchedRevitProcessIds = new();
     private static readonly object _processTrackingLock = new();
+    
+    /// <summary>
+    /// Tracks processes that need debugger detachment during shutdown
+    /// </summary>
+    private static readonly HashSet<int> _processesNeedingDetachment = new();
+    private static readonly object _detachmentTrackingLock = new();
 
     static PipeClientHelper()
     {
@@ -149,6 +155,10 @@ public static class PipeClientHelper
     /// </summary>
     private static void OnProcessExit(object? sender, EventArgs e)
     {
+        // First, detach debugger from any processes that need it
+        DetachDebuggersOnShutdown();
+        
+        // Then clean up launched Revit processes
         CleanupLaunchedRevitProcesses(null);
     }
 
@@ -157,14 +167,125 @@ public static class PipeClientHelper
     /// </summary>
     private static void OnDomainUnload(object? sender, EventArgs e)
     {
+        // First, detach debugger from any processes that need it
+        DetachDebuggersOnShutdown();
+        
+        // Then clean up launched Revit processes
         CleanupLaunchedRevitProcesses(null);
+    }
+    
+    /// <summary>
+    /// Tracks a process that needs debugger detachment during shutdown
+    /// </summary>
+    /// <param name="processId">The process ID that needs detachment</param>
+    private static void TrackProcessForDetachment(int processId)
+    {
+        lock (_detachmentTrackingLock)
+        {
+            _processesNeedingDetachment.Add(processId);
+        }
+    }
+    
+    /// <summary>
+    /// Stops tracking a process for detachment (called when detachment is manually performed)
+    /// </summary>
+    /// <param name="processId">The process ID to stop tracking</param>
+    private static void UntrackProcessForDetachment(int processId)
+    {
+        lock (_detachmentTrackingLock)
+        {
+            _processesNeedingDetachment.Remove(processId);
+        }
+    }
+    
+    /// <summary>
+    /// Detaches debugger from all tracked processes during shutdown
+    /// </summary>
+    private static void DetachDebuggersOnShutdown()
+    {
+        List<int> processesToDetach;
+        lock (_detachmentTrackingLock)
+        {
+            processesToDetach = new List<int>(_processesNeedingDetachment);
+            _processesNeedingDetachment.Clear();
+        }
+
+        if (processesToDetach.Count > 0)
+        {
+            // Use synchronous detachment during shutdown for better reliability
+            foreach (var processId in processesToDetach)
+            {
+                try
+                {
+                    // Perform synchronous detachment with shorter timeout during shutdown
+                    PerformSynchronousDetachment(processId, 2000); // 2 second timeout during shutdown
+                }
+                catch (Exception ex)
+                {
+                    // Log to debug during shutdown (can't use logger here)
+                    Debug.WriteLine($"PipeClientHelper: Error detaching from process {processId} during shutdown: {ex.Message}");
+                }
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Performs synchronous debugger detachment (used during shutdown)
+    /// </summary>
+    /// <param name="processId">The process ID to detach from</param>
+    /// <param name="timeoutMs">Timeout in milliseconds</param>
+    private static void PerformSynchronousDetachment(int processId, int timeoutMs)
+    {
+        var helperPath = FindDebuggerHelper(null);
+        if (string.IsNullOrEmpty(helperPath))
+        {
+            return;
+        }
+
+        try
+        {
+            // Don't try to find VS process during shutdown - too risky
+            var arguments = $"--detach {processId}";
+            
+            var psi = new ProcessStartInfo
+            {
+                FileName = helperPath,
+                Arguments = arguments,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process != null)
+            {
+                // Wait for completion with timeout
+                bool completed = process.WaitForExit(timeoutMs);
+                if (!completed)
+                {
+                    try
+                    {
+                        process.Kill();
+                    }
+                    catch
+                    {
+                        // Ignore kill errors during shutdown
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Ignore all errors during shutdown
+        }
     }
 
     /// <summary>
     /// Tracks a launched Revit process for cleanup
     /// </summary>
     /// <param name="processId">The process ID to track</param>
-    /// <param name="logger">Optional logger for informational messages</param>
+    /// <param name="logger">Optional logger for sending informational messages</param>
     private static void TrackLaunchedRevitProcess(int processId, ILogger? logger)
     {
         lock (_processTrackingLock)
@@ -635,16 +756,27 @@ public static class PipeClientHelper
             logger?.LogInformation("PipeClientHelper: Test execution finished - cleaning up launched Revit processes");
             CleanupLaunchedRevitProcesses(logger);
 
-            // Detach debugger after test execution is completed
-            // This is now asynchronous and won't block the test host from exiting
-            // Can be disabled via environment variable if it causes issues
+            // Handle debugger detachment after test execution is completed
             if (debuggerAttached)
             {
                 var disableAutoDetach = Environment.GetEnvironmentVariable("REVIT_DEBUG_DISABLE_AUTO_DETACH");
                 if (string.IsNullOrEmpty(disableAutoDetach) || disableAutoDetach.ToLower() != "true")
                 {
                     logger?.LogInformation("PipeClientHelper: Test execution finished - initiating debugger detachment");
+                    
+                    // Try immediate detachment first
                     TryDetachDebuggerUsingHelper(connectionResult.ProcessId, logger);
+                    
+                    // Also track for shutdown detachment as backup
+                    TrackProcessForDetachment(connectionResult.ProcessId);
+                    
+                    // Give it a moment to complete, then untrack if successful
+                    Task.Delay(1000).ContinueWith(_ => 
+                    {
+                        // Untrack after delay - if immediate detachment worked, this ensures
+                        // we don't try again during shutdown
+                        UntrackProcessForDetachment(connectionResult.ProcessId);
+                    });
                 }
                 else
                 {
@@ -848,9 +980,43 @@ public static class PipeClientHelper
                 return;
             }
 
-            // Start the detachment process asynchronously to avoid blocking test host exit
-            Task.Run(() =>
+            // Check if we should use synchronous detachment (more reliable but may delay test host exit)
+            var useSyncDetach = Environment.GetEnvironmentVariable("REVIT_DEBUG_SYNC_DETACH");
+            bool useSynchronousDetachment = !string.IsNullOrEmpty(useSyncDetach) && useSyncDetach.ToLower() == "true";
+
+            if (useSynchronousDetachment)
             {
+                // Synchronous detachment - blocks until completion but more reliable
+                logger?.LogInformation("PipeClientHelper: Using synchronous debugger detachment (REVIT_DEBUG_SYNC_DETACH=true)");
+                
+                try
+                {
+                    var vsProcessId = FindVisualStudioProcessForTestRun(logger);
+                    var arguments = vsProcessId.HasValue 
+                        ? $"--detach {processId} --vs-process {vsProcessId.Value}"
+                        : $"--detach {processId}";
+                    
+                    var result = ExecuteDebuggerHelper(helperPath, arguments, 8000, logger); // Longer timeout for sync
+                    
+                    if (result.Success)
+                    {
+                        logger?.LogInformation($"PipeClientHelper: Successfully detached debugger from process {processId} (synchronous)");
+                    }
+                    else
+                    {
+                        logger?.LogInformation($"PipeClientHelper: Synchronous detachment completed with exit code {result.ExitCode}");
+                    }
+                }
+                catch (Exception syncEx)
+                {
+                    logger?.LogInformation($"PipeClientHelper: Error in synchronous debugger detachment: {syncEx.Message}");
+                }
+            }
+            else
+            {
+                // Asynchronous detachment using independent process (default)
+                logger?.LogInformation("PipeClientHelper: Using asynchronous debugger detachment (set REVIT_DEBUG_SYNC_DETACH=true for synchronous)");
+                
                 try
                 {
                     // Try to find the Visual Studio process that initiated the test run
@@ -859,55 +1025,35 @@ public static class PipeClientHelper
                         ? $"--detach {processId} --vs-process {vsProcessId.Value}"
                         : $"--detach {processId}";
                     
-                    var result = ExecuteDebuggerHelper(helperPath, arguments, 5000, logger);
-
-                    if (result.Success)
+                    var psi = new ProcessStartInfo
                     {
-                        logger?.LogInformation($"PipeClientHelper: Successfully detached debugger from process {processId}");
-                        if (!string.IsNullOrEmpty(result.Output))
-                        {
-                            logger?.LogInformation($"PipeClientHelper: Detach helper output: {result.Output.Trim()}");
-                        }
+                        FileName = helperPath,
+                        Arguments = arguments,
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = false,
+                        RedirectStandardError = false
+                    };
+
+                    logger?.LogInformation($"PipeClientHelper: Starting independent detachment process: {helperPath} {arguments}");
+                    
+                    // Start the process and let it run independently
+                    var detachProcess = Process.Start(psi);
+                    if (detachProcess != null)
+                    {
+                        logger?.LogInformation($"PipeClientHelper: Debugger detachment process started independently (PID: {detachProcess.Id})");
+                        // Don't wait for it to complete - let it run independently
                     }
                     else
                     {
-                        if (result.ExitCode == -1)
-                        {
-                            logger?.LogInformation($"PipeClientHelper: Detach helper timed out - continuing");
-                        }
-                        else
-                        {
-                            logger?.LogInformation($"PipeClientHelper: Detach helper completed with exit code {result.ExitCode}");
-                            if (!string.IsNullOrEmpty(result.Error))
-                            {
-                                logger?.LogInformation($"PipeClientHelper: Detach helper error: {result.Error.Trim()}");
-                            }
-                            if (!string.IsNullOrEmpty(result.Output))
-                            {
-                                logger?.LogInformation($"PipeClientHelper: Detach helper output: {result.Output.Trim()}");
-                            }
-
-                            // Exit codes for detachment (not necessarily errors)
-                            switch (result.ExitCode)
-                            {
-                                case 1:
-                                    logger?.LogInformation("PipeClientHelper: Visual Studio not found - debugger detachment not needed");
-                                    break;
-                                case 2:
-                                    logger?.LogInformation("PipeClientHelper: Process not being debugged - detachment not needed");
-                                    break;
-                            }
-                        }
+                        logger?.LogInformation("PipeClientHelper: Failed to start debugger detachment process");
                     }
                 }
-                catch (Exception asyncEx)
+                catch (Exception ex)
                 {
-                    logger?.LogInformation($"PipeClientHelper: Error in async debugger detachment: {asyncEx.Message}");
+                    logger?.LogInformation($"PipeClientHelper: Error starting independent debugger detachment: {ex.Message}");
                 }
-            });
-
-            // Don't wait for the async task to complete - let test host exit normally
-            logger?.LogInformation($"PipeClientHelper: Debugger detachment initiated asynchronously for process {processId}");
+            }
         }
         catch (Exception ex)
         {
