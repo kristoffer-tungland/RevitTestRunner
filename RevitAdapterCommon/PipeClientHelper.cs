@@ -545,33 +545,6 @@ public static class PipeClientHelper
     }
 
     /// <summary>
-    /// Attempts to attach the current debugger to a running Revit process
-    /// </summary>
-    /// <param name="logger">Optional logger for sending informational messages</param>
-    private static void TryAttachDebuggerToRevit(ILogger? logger)
-    {
-        try
-        {
-            logger?.LogInformation("PipeClientHelper: Attempting to attach debugger to Revit process...");
-            
-            var revitProcesses = Process.GetProcessesByName("Revit");
-            if (revitProcesses.Length == 0)
-            {
-                logger?.LogInformation("PipeClientHelper: No Revit processes found for debugger attachment");
-                return;
-            }
-
-            // Try to attach to the first available Revit process
-            var revitProcess = revitProcesses[0];
-            TryAttachDebuggerToRevit(revitProcess.Id, logger);
-        }
-        catch (Exception ex)
-        {
-            logger?.LogError($"PipeClientHelper: Failed to attach debugger to Revit: {ex.Message}");
-        }
-    }
-
-    /// <summary>
     /// Attempts to attach the current debugger to a specific Revit process
     /// </summary>
     /// <param name="processId">The specific Revit process ID to attach to</param>
@@ -635,6 +608,90 @@ public static class PipeClientHelper
     }
 
     /// <summary>
+    /// Helper result for debugger helper operations
+    /// </summary>
+    private record DebuggerHelperResult(bool Success, string? Output, string? Error, int ExitCode);
+
+    /// <summary>
+    /// Finds the RevitDebuggerHelper.exe in common locations
+    /// </summary>
+    /// <param name="logger">Optional logger</param>
+    /// <returns>Path to helper executable or null if not found</returns>
+    private static string? FindDebuggerHelper(ILogger? logger)
+    {
+        var configuration = AppDomain.CurrentDomain.BaseDirectory.Contains("Debug", StringComparison.OrdinalIgnoreCase)
+            ? "Debug"
+            : "Release";
+
+        // Look for the helper executable in common locations
+        var helperPaths = new[]
+        {
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "RevitDebuggerHelper.exe"),
+            // Navigate from test assembly location to workspace root, then to helper
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "RevitDebuggerHelper", "bin", configuration, "RevitDebuggerHelper.exe"),
+            "RevitDebuggerHelper.exe", // Try PATH
+        };
+
+        foreach (var path in helperPaths)
+        {
+            if (File.Exists(path))
+            {
+                logger?.LogInformation($"PipeClientHelper: Found helper at: {path}");
+                return path;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Executes the debugger helper with the specified arguments
+    /// </summary>
+    /// <param name="helperPath">Path to the helper executable</param>
+    /// <param name="arguments">Arguments to pass to the helper</param>
+    /// <param name="timeoutMs">Timeout in milliseconds</param>
+    /// <param name="logger">Optional logger</param>
+    /// <returns>Result of the helper execution</returns>
+    private static DebuggerHelperResult ExecuteDebuggerHelper(string helperPath, string arguments, int timeoutMs, ILogger? logger)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = helperPath,
+            Arguments = arguments,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+
+        using var process = Process.Start(psi);
+        if (process == null)
+        {
+            return new DebuggerHelperResult(false, null, "Failed to start debugger helper process", -1);
+        }
+
+        bool completed = process.WaitForExit(timeoutMs);
+        
+        if (!completed)
+        {
+            try
+            {
+                process.Kill();
+            }
+            catch (Exception killEx)
+            {
+                logger?.LogInformation($"PipeClientHelper: Failed to kill timed-out helper: {killEx.Message}");
+            }
+            return new DebuggerHelperResult(false, null, $"Helper timed out after {timeoutMs}ms", -1);
+        }
+
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+
+        return new DebuggerHelperResult(process.ExitCode == 0, output, error, process.ExitCode);
+    }
+
+    /// <summary>
     /// Attempts to attach debugger using the .NET Framework helper application
     /// </summary>
     /// <param name="processId">The process ID to attach to</param>
@@ -645,26 +702,7 @@ public static class PipeClientHelper
         {
             logger?.LogInformation($"PipeClientHelper: Attempting to attach debugger using helper application to process {processId}");
 
-            // Look for the helper executable in common locations
-            var helperPaths = new[]
-            {
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "RevitDebuggerHelper.exe"),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "RevitDebuggerHelper", "bin", "Release", "RevitDebuggerHelper.exe"),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "RevitDebuggerHelper", "bin", "Debug", "RevitDebuggerHelper.exe"),
-                "RevitDebuggerHelper.exe", // Try PATH
-                @"C:\Users\ktu\source\repos\COWI-Tools\RevitTestRunner\RevitDebuggerHelper\bin\Debug\RevitDebuggerHelper.exe"
-            };
-
-            string? helperPath = null;
-            foreach (var path in helperPaths)
-            {
-                if (File.Exists(path))
-                {
-                    helperPath = path;
-                    break;
-                }
-            }
-
+            var helperPath = FindDebuggerHelper(logger);
             if (string.IsNullOrEmpty(helperPath))
             {
                 logger?.LogInformation("PipeClientHelper: RevitDebuggerHelper.exe not found in expected locations");
@@ -672,48 +710,26 @@ public static class PipeClientHelper
                 return;
             }
 
-            logger?.LogInformation($"PipeClientHelper: Found helper at: {helperPath}");
+            var result = ExecuteDebuggerHelper(helperPath, processId.ToString(), 10000, logger);
 
-            var psi = new ProcessStartInfo
-            {
-                FileName = helperPath,
-                Arguments = processId.ToString(),
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-
-            using var process = Process.Start(psi);
-            if (process == null)
-            {
-                logger?.LogError("PipeClientHelper: Failed to start debugger helper process");
-                return;
-            }
-
-            process.WaitForExit(10000); // Wait up to 10 seconds
-
-            var output = process.StandardOutput.ReadToEnd();
-            var error = process.StandardError.ReadToEnd();
-
-            if (process.ExitCode == 0)
+            if (result.Success)
             {
                 logger?.LogInformation($"PipeClientHelper: Successfully attached debugger to process {processId}");
-                if (!string.IsNullOrEmpty(output))
+                if (!string.IsNullOrEmpty(result.Output))
                 {
-                    logger?.LogInformation($"PipeClientHelper: Helper output: {output.Trim()}");
+                    logger?.LogInformation($"PipeClientHelper: Helper output: {result.Output.Trim()}");
                 }
             }
             else
             {
-                logger?.LogError($"PipeClientHelper: Helper failed with exit code {process.ExitCode}");
-                if (!string.IsNullOrEmpty(error))
+                logger?.LogError($"PipeClientHelper: Helper failed with exit code {result.ExitCode}");
+                if (!string.IsNullOrEmpty(result.Error))
                 {
-                    logger?.LogError($"PipeClientHelper: Helper error: {error.Trim()}");
+                    logger?.LogError($"PipeClientHelper: Helper error: {result.Error.Trim()}");
                 }
-                if (!string.IsNullOrEmpty(output))
+                if (!string.IsNullOrEmpty(result.Output))
                 {
-                    logger?.LogInformation($"PipeClientHelper: Helper output: {output.Trim()}");
+                    logger?.LogInformation($"PipeClientHelper: Helper output: {result.Output.Trim()}");
                 }
                 
                 // Fallback to manual attachment message
@@ -738,105 +754,56 @@ public static class PipeClientHelper
         {
             logger?.LogInformation($"PipeClientHelper: Attempting to detach debugger from process {processId} using helper application");
 
-            // Look for the helper executable in common locations
-            var helperPaths = new[]
-            {
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "RevitDebuggerHelper.exe"),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "RevitDebuggerHelper", "bin", "Release", "RevitDebuggerHelper.exe"),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "RevitDebuggerHelper", "bin", "Debug", "RevitDebuggerHelper.exe"),
-                "RevitDebuggerHelper.exe", // Try PATH
-                @"C:\Users\ktu\source\repos\COWI-Tools\RevitTestRunner\RevitDebuggerHelper\bin\Debug\RevitDebuggerHelper.exe"
-            };
-
-            string? helperPath = null;
-            foreach (var path in helperPaths)
-            {
-                if (File.Exists(path))
-                {
-                    helperPath = path;
-                    break;
-                }
-            }
-
+            var helperPath = FindDebuggerHelper(logger);
             if (string.IsNullOrEmpty(helperPath))
             {
                 logger?.LogInformation("PipeClientHelper: RevitDebuggerHelper.exe not found - skipping debugger detachment");
                 return;
             }
 
-            logger?.LogInformation($"PipeClientHelper: Found helper at: {helperPath}");
-
             // Start the detachment process asynchronously to avoid blocking test host exit
             Task.Run(() =>
             {
                 try
                 {
-                    var psi = new ProcessStartInfo
-                    {
-                        FileName = helperPath,
-                        Arguments = $"--detach {processId}",
-                        UseShellExecute = false,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        CreateNoWindow = true
-                    };
+                    var result = ExecuteDebuggerHelper(helperPath, $"--detach {processId}", 5000, logger);
 
-                    using var process = Process.Start(psi);
-                    if (process == null)
-                    {
-                        logger?.LogInformation("PipeClientHelper: Failed to start debugger helper process for detachment");
-                        return;
-                    }
-
-                    // Use a shorter timeout to avoid hanging the test host
-                    bool completed = process.WaitForExit(5000); // Wait up to 5 seconds
-                    
-                    if (!completed)
-                    {
-                        logger?.LogInformation($"PipeClientHelper: Detach helper timed out - killing process and continuing");
-                        try
-                        {
-                            process.Kill();
-                        }
-                        catch (Exception killEx)
-                        {
-                            logger?.LogInformation($"PipeClientHelper: Failed to kill timed-out helper: {killEx.Message}");
-                        }
-                        return;
-                    }
-
-                    var output = process.StandardOutput.ReadToEnd();
-                    var error = process.StandardError.ReadToEnd();
-
-                    if (process.ExitCode == 0)
+                    if (result.Success)
                     {
                         logger?.LogInformation($"PipeClientHelper: Successfully detached debugger from process {processId}");
-                        if (!string.IsNullOrEmpty(output))
+                        if (!string.IsNullOrEmpty(result.Output))
                         {
-                            logger?.LogInformation($"PipeClientHelper: Detach helper output: {output.Trim()}");
+                            logger?.LogInformation($"PipeClientHelper: Detach helper output: {result.Output.Trim()}");
                         }
                     }
                     else
                     {
-                        logger?.LogInformation($"PipeClientHelper: Detach helper completed with exit code {process.ExitCode}");
-                        if (!string.IsNullOrEmpty(error))
+                        if (result.ExitCode == -1)
                         {
-                            logger?.LogInformation($"PipeClientHelper: Detach helper error: {error.Trim()}");
+                            logger?.LogInformation($"PipeClientHelper: Detach helper timed out - continuing");
                         }
-                        if (!string.IsNullOrEmpty(output))
+                        else
                         {
-                            logger?.LogInformation($"PipeClientHelper: Detach helper output: {output.Trim()}");
-                        }
-                        
-                        // Exit codes for detachment (not necessarily errors)
-                        switch (process.ExitCode)
-                        {
-                            case 1:
-                                logger?.LogInformation("PipeClientHelper: Visual Studio not found - debugger detachment not needed");
-                                break;
-                            case 2:
-                                logger?.LogInformation("PipeClientHelper: Process not being debugged - detachment not needed");
-                                break;
+                            logger?.LogInformation($"PipeClientHelper: Detach helper completed with exit code {result.ExitCode}");
+                            if (!string.IsNullOrEmpty(result.Error))
+                            {
+                                logger?.LogInformation($"PipeClientHelper: Detach helper error: {result.Error.Trim()}");
+                            }
+                            if (!string.IsNullOrEmpty(result.Output))
+                            {
+                                logger?.LogInformation($"PipeClientHelper: Detach helper output: {result.Output.Trim()}");
+                            }
+							
+                            // Exit codes for detachment (not necessarily errors)
+                            switch (result.ExitCode)
+                            {
+                                case 1:
+                                    logger?.LogInformation("PipeClientHelper: Visual Studio not found - debugger detachment not needed");
+                                    break;
+                                case 2:
+                                    logger?.LogInformation("PipeClientHelper: Process not being debugged - detachment not needed");
+                                    break;
+                            }
                         }
                     }
                 }
