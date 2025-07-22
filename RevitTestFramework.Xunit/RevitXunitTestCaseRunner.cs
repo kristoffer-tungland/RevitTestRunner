@@ -28,6 +28,29 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
         return await Task.Run(async () =>
         {
             var methodName = TestCase.TestMethod.Method.Name;
+            var className = TestCase.TestMethod.TestClass.Class.Name;
+            
+            // Check if we're in debug mode - if debugger is attached, add a breakpoint opportunity
+            if (Debugger.IsAttached)
+            {
+                Debug.WriteLine($"RevitXunitTestCaseRunner: Running test '{className}.{methodName}' in debug mode");
+                
+                // Only break if this is explicitly a debug test or if environment variable is set
+                var forceBreak = Environment.GetEnvironmentVariable("REVIT_TEST_BREAK_ON_ALL") == "true";
+                var isDebugTest = methodName.Contains("Debug", StringComparison.OrdinalIgnoreCase) || 
+                                 className.Contains("Debug", StringComparison.OrdinalIgnoreCase);
+                
+                if (forceBreak || isDebugTest)
+                {
+                    Debug.WriteLine($"RevitXunitTestCaseRunner: Breaking for test '{methodName}' (ForceBreak={forceBreak}, IsDebugTest={isDebugTest})");
+                    // This line serves as a potential breakpoint location for debugging test setup
+                    Debugger.Break(); // This will pause execution if a debugger is attached
+                }
+                else
+                {
+                    Debug.WriteLine($"RevitXunitTestCaseRunner: Skipping break for test '{methodName}' (set REVIT_TEST_BREAK_ON_ALL=true to break on all tests)");
+                }
+            }
                         
             try
             {
@@ -73,6 +96,14 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
                     }
                 }
 
+                // Add debug information before running the actual test
+                if (Debugger.IsAttached)
+                {
+                    Debug.WriteLine($"RevitXunitTestCaseRunner: About to execute test method '{methodName}'");
+                    Debug.WriteLine($"RevitXunitTestCaseRunner: Document available: {_document != null}");
+                    Debug.WriteLine($"RevitXunitTestCaseRunner: Transaction group active: {_transactionGroup != null}");
+                }
+
                 // Now run the test with the prepared document
                 return await base.RunTestAsync();
             }
@@ -112,6 +143,11 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
                         }
                     }
                 });
+                
+                if (Debugger.IsAttached)
+                {
+                    Debug.WriteLine($"RevitXunitTestCaseRunner: Completed test '{methodName}' cleanup");
+                }
             }
         });
     }
@@ -228,6 +264,21 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
 
                 try
                 {
+                    // Debug support: Add breakpoint opportunity when debugger is attached
+                    if (Debugger.IsAttached)
+                    {
+                        Debug.WriteLine($"RevitUITestRunner: About to invoke test method '{TestMethod.Name}' on UI thread");
+                        Debug.WriteLine($"RevitUITestRunner: Test class: {TestClass.Name}");
+                        Debug.WriteLine($"RevitUITestRunner: Arguments count: {TestMethodArguments.Length}");
+                        
+                        // This serves as a breakpoint location for debugging the actual test method execution
+                        if (TestMethod.Name.Contains("Debug", StringComparison.OrdinalIgnoreCase) || 
+                            TestClass.Name.Contains("Debug", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Debugger.Break(); // Break only for tests that seem to be debug-related
+                        }
+                    }
+
                     // Create test instance
                     var testInstance = Activator.CreateInstance(TestClass, ConstructorArguments);
 
@@ -241,6 +292,12 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
                     }
 
                     timer.Stop();
+                    
+                    if (Debugger.IsAttached)
+                    {
+                        Debug.WriteLine($"RevitUITestRunner: Test method '{TestMethod.Name}' completed successfully in {timer.ElapsedMilliseconds}ms");
+                    }
+                    
                     return timer.ElapsedMilliseconds;
                 }
                 catch (Exception ex)
@@ -248,6 +305,12 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
                     timer.Stop();
                     // Unwrap TargetInvocationException to get the actual test exception
                     exception = UnwrapException(ex);
+                    
+                    if (Debugger.IsAttached)
+                    {
+                        Debug.WriteLine($"RevitUITestRunner: Test method '{TestMethod.Name}' failed with exception: {exception.Message}");
+                    }
+                    
                     return timer.ElapsedMilliseconds;
                 }
             });

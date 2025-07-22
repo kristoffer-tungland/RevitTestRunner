@@ -6,6 +6,7 @@ using RevitAddin.Common;
 using RevitTestFramework.Common;
 using RevitTestFramework.Contracts;
 using System.Text.Json;
+using System.Diagnostics;
 
 namespace RevitAddin.Xunit;
 
@@ -35,6 +36,36 @@ public static class RevitXunitExecutor
         // Deserialize the command in the isolated context to avoid cross-ALC type issues
         var command = JsonSerializer.Deserialize<PipeCommand>(commandJson)
             ?? throw new InvalidOperationException("Failed to deserialize PipeCommand");
+
+        // Handle debug mode if enabled
+        if (command.Debug)
+        {
+            Debug.WriteLine("RevitXunitExecutor: Debug mode enabled - debugger can now be attached to Revit process");
+            
+            // If debugger is not already attached, provide helpful information
+            if (!Debugger.IsAttached)
+            {
+                var processId = Process.GetCurrentProcess().Id;
+                Debug.WriteLine($"RevitXunitExecutor: To debug tests, attach debugger to Revit.exe process ID: {processId}");
+                
+                // Optional: Launch debugger if possible (requires Just-In-Time debugging enabled)
+                try
+                {
+                    if (Debugger.Launch())
+                    {
+                        Debug.WriteLine("RevitXunitExecutor: Debugger launched successfully");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"RevitXunitExecutor: Failed to launch debugger: {ex.Message}");
+                }
+            }
+            else
+            {
+                Debug.WriteLine("RevitXunitExecutor: Debugger is already attached - test debugging enabled");
+            }
+        }
 
         RevitModelService.CancellationToken = cancellationToken;
         var methods = command.TestMethods;

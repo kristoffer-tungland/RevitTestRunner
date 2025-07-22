@@ -67,8 +67,14 @@ namespace RevitXunitAdapter
                     Command = "RunTests",
                     TestAssembly = assembly,
                     TestMethods = methods,
-                    CancelPipe = "RevitCancel_" + Guid.NewGuid().ToString("N")
+                    CancelPipe = "RevitCancel_" + Guid.NewGuid().ToString("N"),
+                    Debug = Debugger.IsAttached
                 };
+
+                if (command.Debug)
+                {
+                    frameworkHandle.SendMessage(TestMessageLevel.Informational, "RevitXunitExecutor: Debugger detected - enabling debug mode for Revit test execution");
+                }
 
                 frameworkHandle.SendMessage(TestMessageLevel.Informational, "RevitXunitExecutor: Sending command to Revit via named pipe");
 
@@ -110,7 +116,7 @@ namespace RevitXunitAdapter
                     {
                         frameworkHandle.SendMessage(TestMessageLevel.Error, $"RevitXunitExecutor: Error processing result line '{line}': {ex.Message}");
                     }
-                }, token, revitVersion, frameworkHandle);
+                }, token, revitVersion, frameworkHandle.ToLogger());
             }
             catch (Exception ex)
             {
