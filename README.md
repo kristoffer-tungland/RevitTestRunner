@@ -9,7 +9,19 @@
 - **RevitXunitAdapter** – Test adapter for xUnit. Discovers tests and sends execution commands to the Revit process.
 - **RevitTestFramework.Xunit** – xUnit-specific framework components and runners.
 - **RevitTestFramework.Xunit.Contracts** – Attributes and helpers shared by the add-in and test projects.
+- **RevitDebuggerHelper** – .NET Framework 4.8 helper for Visual Studio debugger operations with advanced multi-instance support.
 - **MyRevitTestsXunit** – Example xUnit test library that uses the `RevitFact` attribute.
+
+## Key Features
+
+- **🔧 Standard xUnit Tests** - Write familiar xUnit tests with `[RevitFact]` attribute
+- **📁 Automatic Model Loading** - Load local files, cloud models, or use active documents
+- **🔌 Full Revit API Access** - Tests run inside Revit with complete API access
+- **🔍 Visual Studio Integration** - Results appear in Test Explorer with intelligent debugger support
+- **🚀 CI/CD Ready** - Works with dotnet test and build pipelines
+- **📝 Version Placeholders** - Dynamic Revit version path resolution
+- **🎯 Multiple Parameter Types** - Inject Document, UIApplication, or both
+- **🐛 Advanced Debugging** - Smart Visual Studio instance detection for seamless debugging experience
 
 ## Getting Started
 
@@ -151,6 +163,27 @@ Your test methods can accept the following parameters, and the framework will in
 - **`Document? doc`** - Optional document (when using no parameters, can be null if no active document)
 - **`UIApplication uiapp`** - The Revit UI application instance
 
+## Advanced Debugging Support
+
+The test framework includes sophisticated debugging capabilities:
+
+### Automatic Debugger Attachment
+- **Smart Instance Detection** - Automatically finds the correct Visual Studio instance when multiple are running
+- **Process Tree Analysis** - Walks up the process hierarchy to identify the Visual Studio that initiated the test run
+- **Running Object Table (ROT) Enumeration** - Uses Windows COM ROT to find all Visual Studio instances
+- **Reliable Detachment** - Multiple strategies ensure debugger is properly detached after test completion
+
+### Debugging Environment Variables
+- `REVIT_DEBUG_DISABLE_AUTO_DETACH=true` - Disable automatic debugger detachment
+- `REVIT_DEBUG_SYNC_DETACH=true` - Use synchronous detachment (blocks test completion until debugger is detached)
+
+### Multiple Visual Studio Instance Support
+When you have multiple Visual Studio instances open, the framework:
+1. Prioritizes the Visual Studio instance that started the test run
+2. Falls back to any available Visual Studio instance
+3. Uses the RevitDebuggerHelper (.NET Framework 4.8) for reliable COM interop
+4. Provides detailed logging for troubleshooting debugger operations
+
 ## Building
 
 The projects rely on NuGet packages (`xunit`, `Microsoft.NET.Test.Sdk`, etc.). Building requires restoring those packages. In environments without internet access the restore step will fail.
@@ -164,11 +197,14 @@ dotnet build RevitTestRunner.sln
 1. **Test Discovery**: The RevitXunitAdapter discovers tests marked with `[RevitFact]` in your test assemblies
 2. **Revit Communication**: When tests run, the adapter communicates with a running Revit instance via named pipes
 3. **Model Loading**: If specified, the appropriate Revit model is opened automatically
-4. **Test Execution**: Tests run inside the Revit process with full access to the Revit API
-5. **Result Reporting**: Test results are reported back to Visual Studio Test Explorer
+4. **Debugger Attachment**: If debugging is enabled, automatically attaches to the correct Visual Studio instance
+5. **Test Execution**: Tests run inside the Revit process with full access to the Revit API
+6. **Result Reporting**: Test results are reported back to Visual Studio Test Explorer
+7. **Cleanup**: Automatic debugger detachment and process cleanup ensures clean test cycles
 
 ## Requirements
 
 - Autodesk Revit (2025 or compatible version)
 - .NET 8.0
 - Visual Studio with Test Explorer or dotnet test CLI
+- .NET Framework 4.8 (for RevitDebuggerHelper)

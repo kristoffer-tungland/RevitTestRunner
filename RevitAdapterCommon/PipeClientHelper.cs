@@ -691,7 +691,7 @@ public static class PipeClientHelper
         // If debug mode is enabled and debugger is attached, attempt to attach debugger to the specific Revit process
         if (command.Debug && Debugger.IsAttached)
         {
-            TryAttachDebuggerToRevit(connectionResult.ProcessId, logger);
+            TryAttachDebuggerToRevit(connectionResult.ProcessId, logger, command);
             debuggerAttached = true;
         }
 
@@ -765,7 +765,7 @@ public static class PipeClientHelper
                     logger?.LogInformation("PipeClientHelper: Test execution finished - initiating debugger detachment");
                     
                     // Try immediate detachment first
-                    TryDetachDebuggerUsingHelper(connectionResult.ProcessId, logger);
+                    TryDetachDebuggerUsingHelper(connectionResult.ProcessId, logger, command);
                     
                     // Also track for shutdown detachment as backup
                     TrackProcessForDetachment(connectionResult.ProcessId);
@@ -793,6 +793,17 @@ public static class PipeClientHelper
     /// <param name="logger">Optional logger for sending informational messages</param>
     private static void TryAttachDebuggerToRevit(int processId, ILogger? logger)
     {
+        TryAttachDebuggerToRevit(processId, logger, null);
+    }
+
+    /// <summary>
+    /// Attempts to attach the current debugger to a specific Revit process
+    /// </summary>
+    /// <param name="processId">The specific Revit process ID to attach to</param>
+    /// <param name="logger">Optional logger for sending informational messages</param>
+    /// <param name="command">Optional pipe command containing test assembly and method information for improved VS instance detection</param>
+    private static void TryAttachDebuggerToRevit(int processId, ILogger? logger, PipeCommand? command)
+    {
         try
         {
             logger?.LogInformation($"PipeClientHelper: Attempting to attach debugger to specific Revit process {processId}...");
@@ -808,7 +819,7 @@ public static class PipeClientHelper
 
             logger?.LogInformation("PipeClientHelper: Attempting to attach debugger to Revit");
             // Try using the .NET Framework helper application
-            TryAttachDebuggerUsingHelper(processId, logger);
+            TryAttachDebuggerUsingHelper(processId, logger, command);
         }
         catch (ArgumentException)
         {
@@ -909,7 +920,8 @@ public static class PipeClientHelper
     /// </summary>
     /// <param name="processId">The process ID to attach to</param>
     /// <param name="logger">Optional logger</param>
-    private static void TryAttachDebuggerUsingHelper(int processId, ILogger? logger)
+    /// <param name="command">Optional pipe command containing test assembly and method information for improved VS instance detection</param>
+    private static void TryAttachDebuggerUsingHelper(int processId, ILogger? logger, PipeCommand? command)
     {
         try
         {
@@ -924,7 +936,7 @@ public static class PipeClientHelper
             }
 
             // Try to find the Visual Studio process that initiated the test run
-            var vsProcessId = FindVisualStudioProcessForTestRun(logger);
+            var vsProcessId = FindVisualStudioProcessForTestRun(logger, command);
             var arguments = vsProcessId.HasValue 
                 ? $"{processId} --vs-process {vsProcessId.Value}"
                 : processId.ToString();
@@ -967,7 +979,8 @@ public static class PipeClientHelper
     /// </summary>
     /// <param name="processId">The process ID to detach from</param>
     /// <param name="logger">Optional logger</param>
-    private static void TryDetachDebuggerUsingHelper(int processId, ILogger? logger)
+    /// <param name="command">Optional pipe command containing test assembly and method information for improved VS instance detection</param>
+    private static void TryDetachDebuggerUsingHelper(int processId, ILogger? logger, PipeCommand? command = null)
     {
         try
         {
@@ -991,7 +1004,7 @@ public static class PipeClientHelper
                 
                 try
                 {
-                    var vsProcessId = FindVisualStudioProcessForTestRun(logger);
+                    var vsProcessId = FindVisualStudioProcessForTestRun(logger, command);
                     var arguments = vsProcessId.HasValue 
                         ? $"--detach {processId} --vs-process {vsProcessId.Value}"
                         : $"--detach {processId}";
@@ -1020,7 +1033,7 @@ public static class PipeClientHelper
                 try
                 {
                     // Try to find the Visual Studio process that initiated the test run
-                    var vsProcessId = FindVisualStudioProcessForTestRun(logger);
+                    var vsProcessId = FindVisualStudioProcessForTestRun(logger, command);
                     var arguments = vsProcessId.HasValue 
                         ? $"--detach {processId} --vs-process {vsProcessId.Value}"
                         : $"--detach {processId}";
@@ -1063,11 +1076,12 @@ public static class PipeClientHelper
 
     /// <summary>
     /// Attempts to find the Visual Studio process that initiated the current test run
-    /// by walking up the process tree and looking for devenv.exe
+    /// by walking up the process tree and looking for devenv.exe, with enhanced fallback using solution name matching
     /// </summary>
     /// <param name="logger">Optional logger for diagnostic information</param>
+    /// <param name="command">Optional pipe command containing test assembly and method information for improved VS instance detection</param>
     /// <returns>Visual Studio process ID if found, null otherwise</returns>
-    private static int? FindVisualStudioProcessForTestRun(ILogger? logger)
+    private static int? FindVisualStudioProcessForTestRun(ILogger? logger, PipeCommand? command = null)
     {
         try
         {
@@ -1120,14 +1134,28 @@ public static class PipeClientHelper
                 }
             }
             
-            // If we didn't find devenv.exe in the process tree, look for any running devenv.exe processes
+            // Enhanced fallback: If we didn't find devenv.exe in the process tree, look for any running devenv.exe processes
+            // and try to match based on solution name in MainWindowTitle
             logger?.LogInformation("PipeClientHelper: Visual Studio not found in process tree, checking for any running devenv.exe processes");
             
             var devenvProcesses = Process.GetProcessesByName("devenv");
             if (devenvProcesses.Length > 0)
             {
+                logger?.LogInformation($"PipeClientHelper: Found {devenvProcesses.Length} running Visual Studio process(es)");
+                
+                // Try to extract solution/project names from the test assembly and test methods
+                var candidateSolutionNames = ExtractCandidateSolutionNames(command, logger);
+                
+                // Try to find a Visual Studio instance with matching solution name in MainWindowTitle
+                var matchedProcess = FindVisualStudioByMainWindowTitle(devenvProcesses, candidateSolutionNames, logger);
+                if (matchedProcess != null)
+                {
+                    return matchedProcess.Id;
+                }
+                
+                // Fallback to first Visual Studio process if no title match found
                 var devenvProcess = devenvProcesses[0];
-                logger?.LogInformation($"PipeClientHelper: Found running Visual Studio process: devenv.exe (ID: {devenvProcess.Id})");
+                logger?.LogInformation($"PipeClientHelper: No MainWindowTitle match found, using first Visual Studio process: devenv.exe (ID: {devenvProcess.Id})");
                 return devenvProcess.Id;
             }
             
@@ -1139,6 +1167,147 @@ public static class PipeClientHelper
             logger?.LogInformation($"PipeClientHelper: Error finding Visual Studio process: {ex.Message}");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Extracts candidate solution names from test assembly path and test method namespaces
+    /// </summary>
+    /// <param name="command">The pipe command containing test information</param>
+    /// <param name="logger">Optional logger for diagnostic information</param>
+    /// <returns>List of candidate solution names to match against</returns>
+    private static List<string> ExtractCandidateSolutionNames(PipeCommand? command, ILogger? logger)
+    {
+        var candidateNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        
+        if (command == null)
+        {
+            logger?.LogInformation("PipeClientHelper: No command provided for solution name extraction");
+            return candidateNames.ToList();
+        }
+        
+        try
+        {
+            // Extract from test assembly path
+            if (!string.IsNullOrEmpty(command.TestAssembly))
+            {
+                logger?.LogInformation($"PipeClientHelper: Extracting solution names from test assembly: {command.TestAssembly}");
+                
+                // Get assembly file name without extension
+                var assemblyFileName = Path.GetFileNameWithoutExtension(command.TestAssembly);
+                if (!string.IsNullOrEmpty(assemblyFileName))
+                {
+                    candidateNames.Add(assemblyFileName);
+                    logger?.LogInformation($"PipeClientHelper: Added candidate from assembly name: {assemblyFileName}");
+                }
+                
+                // Extract solution name from path segments (look for .sln in parent directories)
+                var directory = Path.GetDirectoryName(command.TestAssembly);
+                while (!string.IsNullOrEmpty(directory))
+                {
+                    var slnFiles = Directory.GetFiles(directory, "*.sln");
+                    if (slnFiles.Length > 0)
+                    {
+                        foreach (var slnFile in slnFiles)
+                        {
+                            var solutionName = Path.GetFileNameWithoutExtension(slnFile);
+                            candidateNames.Add(solutionName);
+                            logger?.LogInformation($"PipeClientHelper: Added candidate from solution file: {solutionName}");
+                        }
+                        break; // Found solution files, stop looking
+                    }
+                    directory = Path.GetDirectoryName(directory);
+                }
+            }
+            
+            // Extract from test method namespaces
+            if (command.TestMethods != null && command.TestMethods.Length > 0)
+            {
+                logger?.LogInformation($"PipeClientHelper: Extracting solution names from {command.TestMethods.Length} test method(s)");
+                
+                foreach (var testMethod in command.TestMethods)
+                {
+                    if (string.IsNullOrEmpty(testMethod)) continue;
+                    
+                    // Extract namespace parts from fully qualified test name
+                    // Format is typically: Namespace.ClassName.MethodName
+                    var parts = testMethod.Split('.');
+                    if (parts.Length >= 2)
+                    {
+                        // Try different combinations of namespace parts
+                        var rootNamespace = parts[0];
+                        candidateNames.Add(rootNamespace);
+                        
+                        // Try first two parts combined
+                        if (parts.Length >= 2)
+                        {
+                            var combinedNamespace = $"{parts[0]}.{parts[1]}";
+                            candidateNames.Add(combinedNamespace);
+                        }
+                        
+                        logger?.LogInformation($"PipeClientHelper: Added candidates from test method namespace: {rootNamespace}");
+                    }
+                }
+            }
+            
+            logger?.LogInformation($"PipeClientHelper: Extracted {candidateNames.Count} candidate solution names: {string.Join(", ", candidateNames)}");
+        }
+        catch (Exception ex)
+        {
+            logger?.LogInformation($"PipeClientHelper: Error extracting candidate solution names: {ex.Message}");
+        }
+        
+        return candidateNames.ToList();
+    }
+
+    /// <summary>
+    /// Finds Visual Studio process by matching MainWindowTitle against candidate solution names
+    /// </summary>
+    /// <param name="devenvProcesses">Array of Visual Studio processes to check</param>
+    /// <param name="candidateSolutionNames">List of candidate solution names to match</param>
+    /// <param name="logger">Optional logger for diagnostic information</param>
+    /// <returns>Matching process or null if no match found</returns>
+    private static Process? FindVisualStudioByMainWindowTitle(Process[] devenvProcesses, List<string> candidateSolutionNames, ILogger? logger)
+    {
+        if (candidateSolutionNames.Count == 0)
+        {
+            logger?.LogInformation("PipeClientHelper: No candidate solution names to match against");
+            return null;
+        }
+        
+        foreach (var process in devenvProcesses)
+        {
+            try
+            {
+                process.Refresh(); // Refresh to get current window title
+                var mainWindowTitle = process.MainWindowTitle;
+                
+                if (string.IsNullOrEmpty(mainWindowTitle))
+                {
+                    logger?.LogInformation($"PipeClientHelper: Visual Studio process {process.Id} has no main window title");
+                    continue;
+                }
+                
+                logger?.LogInformation($"PipeClientHelper: Checking Visual Studio process {process.Id} with title: '{mainWindowTitle}'");
+                
+                // Check if any candidate solution name appears in the window title
+                foreach (var candidateName in candidateSolutionNames)
+                {
+                    if (mainWindowTitle.Contains(candidateName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        logger?.LogInformation($"PipeClientHelper: Found match! Visual Studio process {process.Id} title contains '{candidateName}'");
+                        return process;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.LogInformation($"PipeClientHelper: Error checking Visual Studio process {process.Id}: {ex.Message}");
+                continue;
+            }
+        }
+        
+        logger?.LogInformation("PipeClientHelper: No Visual Studio process found with matching MainWindowTitle");
+        return null;
     }
 
     /// <summary>
