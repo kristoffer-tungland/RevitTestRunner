@@ -136,7 +136,7 @@ public static class PipeClientHelper
     /// </summary>
     private static readonly HashSet<int> _launchedRevitProcessIds = new();
     private static readonly object _processTrackingLock = new();
-    
+
     /// <summary>
     /// Tracks processes that need debugger detachment during shutdown
     /// </summary>
@@ -157,7 +157,7 @@ public static class PipeClientHelper
     {
         // First, detach debugger from any processes that need it
         DetachDebuggersOnShutdown();
-        
+
         // Then clean up launched Revit processes
         CleanupLaunchedRevitProcesses(null);
     }
@@ -169,11 +169,11 @@ public static class PipeClientHelper
     {
         // First, detach debugger from any processes that need it
         DetachDebuggersOnShutdown();
-        
+
         // Then clean up launched Revit processes
         CleanupLaunchedRevitProcesses(null);
     }
-    
+
     /// <summary>
     /// Tracks a process that needs debugger detachment during shutdown
     /// </summary>
@@ -185,7 +185,7 @@ public static class PipeClientHelper
             _processesNeedingDetachment.Add(processId);
         }
     }
-    
+
     /// <summary>
     /// Stops tracking a process for detachment (called when detachment is manually performed)
     /// </summary>
@@ -197,7 +197,7 @@ public static class PipeClientHelper
             _processesNeedingDetachment.Remove(processId);
         }
     }
-    
+
     /// <summary>
     /// Detaches debugger from all tracked processes during shutdown
     /// </summary>
@@ -228,7 +228,7 @@ public static class PipeClientHelper
             }
         }
     }
-    
+
     /// <summary>
     /// Performs synchronous debugger detachment (used during shutdown)
     /// </summary>
@@ -246,7 +246,7 @@ public static class PipeClientHelper
         {
             // Don't try to find VS process during shutdown - too risky
             var arguments = $"--detach {processId}";
-            
+
             var psi = new ProcessStartInfo
             {
                 FileName = helperPath,
@@ -323,7 +323,7 @@ public static class PipeClientHelper
         if (processesToKill.Count > 0)
         {
             logger?.LogInformation($"PipeClientHelper: Cleaning up {processesToKill.Count} launched Revit process(es)");
-            
+
             foreach (var processId in processesToKill)
             {
                 try
@@ -529,6 +529,301 @@ public static class PipeClientHelper
     }
 
     /// <summary>
+    /// Ensures the Revit addin is installed before attempting to connect
+    /// </summary>
+    /// <param name="revitVersion">The Revit version to install for</param>
+    /// <param name="logger">Optional logger for informational messages</param>
+    /// <returns>True if addin is installed or was successfully installed, false otherwise</returns>
+    private static bool EnsureRevitAddinInstalled(string revitVersion, ILogger? logger)
+    {
+        try
+        {
+            logger?.LogInformation($"PipeClientHelper: Checking if Revit addin is installed for version {revitVersion}");
+
+            // Get the assembly version to construct the correct manifest filename
+            var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+            var version = assembly.GetName().Version;
+            var assemblyVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "2025.0.0";
+
+            // Check if addin manifest exists (using versioned naming convention)
+            var addinDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Autodesk", "Revit", "Addins", revitVersion);
+            var manifestPath = Path.Combine(addinDir, $"RevitAddin.Xunit.{assemblyVersion}.addin");
+
+            if (File.Exists(manifestPath))
+            {
+                logger?.LogInformation($"PipeClientHelper: Revit addin manifest found at {manifestPath}");
+                return true;
+            }
+
+            logger?.LogInformation($"PipeClientHelper: Revit addin not found at {manifestPath} - attempting automatic installation");
+
+            // Look for RevitAddin files in the current directory or subdirectories
+            var revitAddinPath = FindRevitAddinPath(assemblyVersion, logger);
+            if (string.IsNullOrEmpty(revitAddinPath))
+            {
+                logger?.LogError("PipeClientHelper: RevitAddin files not found - cannot install addin automatically");
+                return false;
+            }
+
+            // Try to install using the PowerShell script first
+            if (TryInstallUsingPowerShellScript(revitAddinPath, logger))
+            {
+                logger?.LogInformation("PipeClientHelper: Successfully installed Revit addin using PowerShell script");
+                return true;
+            }
+
+            // Fallback to direct installation using RevitTestFramework.Common.exe
+            if (TryInstallUsingCommonTool(revitAddinPath, revitVersion, logger))
+            {
+                logger?.LogInformation("PipeClientHelper: Successfully installed Revit addin using common tool");
+                return true;
+            }
+
+            logger?.LogError("PipeClientHelper: Failed to install Revit addin automatically");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogError($"PipeClientHelper: Error ensuring Revit addin installation: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Finds the RevitAddin installation files in the current directory or subdirectories
+    /// </summary>
+    /// <param name="logger">Optional logger for diagnostic information</param>
+    /// <returns>Path to RevitAddin directory containing installation files, or null if not found</returns>
+    private static string? FindRevitAddinPath(string assemblyVersion, ILogger? logger)
+    {
+        try
+        {
+            var configuration = AppDomain.CurrentDomain.BaseDirectory.Contains("Debug", StringComparison.OrdinalIgnoreCase)
+            ? "Debug"
+            : "Release";
+
+            var searchDirectories = new[]
+            {
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "RevitAddin.Xunit", "bin", configuration, "net8.0"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "content","RevitAddin"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget","packages","revitxunit.testadapter", assemblyVersion,"content","RevitAddin")
+            };
+
+            foreach (var searchDir in searchDirectories.Where(d => !string.IsNullOrEmpty(d)))
+            {
+                logger?.LogInformation($"PipeClientHelper: Searching for RevitAddin files in: {searchDir}");
+
+                // Also look for files directly in the search directory
+                var requiredFiles = new[] { "RevitTestFramework.Common.exe", "Install-RevitXunitAddin.ps1" };
+                if (requiredFiles.All(file => File.Exists(Path.Combine(searchDir!, file))))
+                {
+                    logger?.LogInformation($"PipeClientHelper: Found RevitAddin files in directory: {searchDir}");
+                    return searchDir;
+                }
+            }
+
+            logger?.LogInformation("PipeClientHelper: RevitAddin files not found in any search directory");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogInformation($"PipeClientHelper: Error searching for RevitAddin files: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Attempts to install the Revit addin using the PowerShell installation script
+    /// </summary>
+    /// <param name="revitAddinPath">Path to the RevitAddin directory</param>
+    /// <param name="logger">Optional logger for diagnostic information</param>
+    /// <returns>True if installation was successful, false otherwise</returns>
+    private static bool TryInstallUsingPowerShellScript(string revitAddinPath, ILogger? logger)
+    {
+        try
+        {
+            var scriptPath = Path.Combine(revitAddinPath, "Install-RevitXunitAddin.ps1");
+            if (!File.Exists(scriptPath))
+            {
+                logger?.LogInformation("PipeClientHelper: PowerShell installation script not found");
+                return false;
+            }
+
+            var revitAddinXunitAssemblyNameLookup = "RevitAddin.Xunit.*.dll";
+            var assemblyPath = Directory.GetFiles(revitAddinPath, revitAddinXunitAssemblyNameLookup)
+                .FirstOrDefault();
+
+            if (!File.Exists(assemblyPath))
+            {
+                logger?.LogInformation("PipeClientHelper: RevitTestFramework.Common.exe not found");
+                return false;
+            }
+
+            logger?.LogInformation($"PipeClientHelper: Running PowerShell installation script: {scriptPath}");
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = $"-ExecutionPolicy Bypass -File \"{scriptPath}\" \"{assemblyPath}\"",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                WorkingDirectory = revitAddinPath
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null)
+            {
+                logger?.LogInformation("PipeClientHelper: Failed to start PowerShell process");
+                return false;
+            }
+
+            bool completed = process.WaitForExit(30000); // 30 second timeout
+            if (!completed)
+            {
+                try
+                {
+                    process.Kill();
+                }
+                catch { }
+                logger?.LogInformation("PipeClientHelper: PowerShell installation script timed out");
+                return false;
+            }
+
+            var output = process.StandardOutput.ReadToEnd();
+            var error = process.StandardError.ReadToEnd();
+
+            if (process.ExitCode == 0)
+            {
+                logger?.LogInformation("PipeClientHelper: PowerShell installation completed successfully");
+                if (!string.IsNullOrEmpty(output))
+                {
+                    logger?.LogInformation($"PipeClientHelper: Script output: {output.Trim()}");
+                }
+                return true;
+            }
+            else
+            {
+                logger?.LogInformation($"PipeClientHelper: PowerShell installation failed with exit code {process.ExitCode}");
+                if (!string.IsNullOrEmpty(error))
+                {
+                    logger?.LogInformation($"PipeClientHelper: Script error: {error.Trim()}");
+                }
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger?.LogInformation($"PipeClientHelper: Error running PowerShell installation script: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Attempts to install the Revit addin using RevitTestFramework.Common.exe
+    /// </summary>
+    /// <param name="revitAddinPath">Path to the RevitAddin directory</param>
+    /// <param name="revitVersion">The Revit version to install for</param>
+    /// <param name="logger">Optional logger for diagnostic information</param>
+    /// <returns>True if installation was successful, false otherwise</returns>
+    private static bool TryInstallUsingCommonTool(string revitAddinPath, string revitVersion, ILogger? logger)
+    {
+        try
+        {
+            var commonToolPath = Path.Combine(revitAddinPath, "RevitTestFramework.Common.exe");
+            if (!File.Exists(commonToolPath))
+            {
+                logger?.LogInformation("PipeClientHelper: RevitTestFramework.Common.exe not found");
+                return false;
+            }
+
+            var assemblyPath = Path.Combine(revitAddinPath, "RevitAddin.Xunit.dll");
+            if (!File.Exists(assemblyPath))
+            {
+                logger?.LogInformation("PipeClientHelper: RevitAddin.Xunit.dll not found");
+                return false;
+            }
+
+            // Extract assembly version from the assembly filename or use default
+            var assemblyName = Path.GetFileNameWithoutExtension(assemblyPath);
+            var assemblyVersion = $"{revitVersion}.0.0"; // Default format
+
+            // Try to extract version from filename if it follows the expected pattern
+            var versionMatches = System.Text.RegularExpressions.Regex.Match(assemblyName, @"RevitAddin\.Xunit\.(?<version>\d+\.\d+\.\d+)");
+            if (versionMatches.Success)
+            {
+                assemblyVersion = versionMatches.Groups["version"].Value;
+            }
+
+            var addinDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Autodesk", "Revit", "Addins", revitVersion);
+
+            logger?.LogInformation($"PipeClientHelper: Running manifest generation tool: {commonToolPath}");
+
+            var arguments = $"generate-manifest --assembly \"{assemblyPath}\" --assembly-version \"{assemblyVersion}\" --output \"{addinDir}\"";
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = commonToolPath,
+                Arguments = arguments,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                WorkingDirectory = revitAddinPath
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null)
+            {
+                logger?.LogInformation("PipeClientHelper: Failed to start manifest generation tool");
+                return false;
+            }
+
+            bool completed = process.WaitForExit(30000); // 30 second timeout
+            if (!completed)
+            {
+                try
+                {
+                    process.Kill();
+                }
+                catch { }
+                logger?.LogInformation("PipeClientHelper: Manifest generation tool timed out");
+                return false;
+            }
+
+            var output = process.StandardOutput.ReadToEnd();
+            var error = process.StandardError.ReadToEnd();
+
+            if (process.ExitCode == 0)
+            {
+                logger?.LogInformation("PipeClientHelper: Manifest generation completed successfully");
+                if (!string.IsNullOrEmpty(output))
+                {
+                    logger?.LogInformation($"PipeClientHelper: Tool output: {output.Trim()}");
+                }
+                return true;
+            }
+            else
+            {
+                logger?.LogInformation($"PipeClientHelper: Manifest generation failed with exit code {process.ExitCode}");
+                if (!string.IsNullOrEmpty(error))
+                {
+                    logger?.LogInformation($"PipeClientHelper: Tool error: {error.Trim()}");
+                }
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger?.LogInformation($"PipeClientHelper: Error running manifest generation tool: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Connects to a Revit process and returns both the connection and the process ID
     /// If no running Revit process is found, launches a new hidden instance.
     /// </summary>
@@ -537,6 +832,12 @@ public static class PipeClientHelper
     /// <returns>Connection result with client stream and process ID</returns>
     public static RevitConnectionResult ConnectToRevitWithProcessId(string revitVersion, ILogger? logger)
     {
+        // First, ensure the Revit addin is installed
+        if (!EnsureRevitAddinInstalled(revitVersion, logger))
+        {
+            throw new InvalidOperationException($"Failed to ensure Revit addin is installed for version {revitVersion}. Please install the RevitAddin.Xunit manually before running tests.");
+        }
+
         var exceptions = new List<Exception>();
         var revitProcesses = Process.GetProcessesByName("Revit");
 
@@ -763,15 +1064,15 @@ public static class PipeClientHelper
                 if (string.IsNullOrEmpty(disableAutoDetach) || disableAutoDetach.ToLower() != "true")
                 {
                     logger?.LogInformation("PipeClientHelper: Test execution finished - initiating debugger detachment");
-                    
+
                     // Try immediate detachment first
                     TryDetachDebuggerUsingHelper(connectionResult.ProcessId, logger, command);
-                    
+
                     // Also track for shutdown detachment as backup
                     TrackProcessForDetachment(connectionResult.ProcessId);
-                    
+
                     // Give it a moment to complete, then untrack if successful
-                    Task.Delay(1000).ContinueWith(_ => 
+                    Task.Delay(1000).ContinueWith(_ =>
                     {
                         // Untrack after delay - if immediate detachment worked, this ensures
                         // we don't try again during shutdown
@@ -937,10 +1238,10 @@ public static class PipeClientHelper
 
             // Try to find the Visual Studio process that initiated the test run
             var vsProcessId = FindVisualStudioProcessForTestRun(logger, command);
-            var arguments = vsProcessId.HasValue 
+            var arguments = vsProcessId.HasValue
                 ? $"{processId} --vs-process {vsProcessId.Value}"
                 : processId.ToString();
-            
+
             var result = ExecuteDebuggerHelper(helperPath, arguments, 10000, logger);
 
             if (result.Success)
@@ -1001,16 +1302,16 @@ public static class PipeClientHelper
             {
                 // Synchronous detachment - blocks until completion but more reliable
                 logger?.LogInformation("PipeClientHelper: Using synchronous debugger detachment (REVIT_DEBUG_SYNC_DETACH=true)");
-                
+
                 try
                 {
                     var vsProcessId = FindVisualStudioProcessForTestRun(logger, command);
-                    var arguments = vsProcessId.HasValue 
+                    var arguments = vsProcessId.HasValue
                         ? $"--detach {processId} --vs-process {vsProcessId.Value}"
                         : $"--detach {processId}";
-                    
+
                     var result = ExecuteDebuggerHelper(helperPath, arguments, 8000, logger); // Longer timeout for sync
-                    
+
                     if (result.Success)
                     {
                         logger?.LogInformation($"PipeClientHelper: Successfully detached debugger from process {processId} (synchronous)");
@@ -1029,15 +1330,15 @@ public static class PipeClientHelper
             {
                 // Asynchronous detachment using independent process (default)
                 logger?.LogInformation("PipeClientHelper: Using asynchronous debugger detachment (set REVIT_DEBUG_SYNC_DETACH=true for synchronous)");
-                
+
                 try
                 {
                     // Try to find the Visual Studio process that initiated the test run
                     var vsProcessId = FindVisualStudioProcessForTestRun(logger, command);
-                    var arguments = vsProcessId.HasValue 
+                    var arguments = vsProcessId.HasValue
                         ? $"--detach {processId} --vs-process {vsProcessId.Value}"
                         : $"--detach {processId}";
-                    
+
                     var psi = new ProcessStartInfo
                     {
                         FileName = helperPath,
@@ -1049,7 +1350,7 @@ public static class PipeClientHelper
                     };
 
                     logger?.LogInformation($"PipeClientHelper: Starting independent detachment process: {helperPath} {arguments}");
-                    
+
                     // Start the process and let it run independently
                     var detachProcess = Process.Start(psi);
                     if (detachProcess != null)
@@ -1086,32 +1387,32 @@ public static class PipeClientHelper
         try
         {
             logger?.LogInformation("PipeClientHelper: Attempting to find Visual Studio process that initiated test run");
-            
+
             var currentProcess = Process.GetCurrentProcess();
             var currentProcessId = currentProcess.Id;
-            
+
             logger?.LogInformation($"PipeClientHelper: Starting from current process: {currentProcess.ProcessName} (ID: {currentProcessId})");
-            
+
             // Walk up the process tree to find devenv.exe
             var checkedProcesses = new HashSet<int>();
             var processToCheck = currentProcess;
-            
+
             while (processToCheck != null && !checkedProcesses.Contains(processToCheck.Id))
             {
                 checkedProcesses.Add(processToCheck.Id);
-                
+
                 try
                 {
                     var processName = processToCheck.ProcessName;
                     logger?.LogInformation($"PipeClientHelper: Checking process: {processName} (ID: {processToCheck.Id})");
-                    
+
                     // Check if this is a Visual Studio process
                     if (processName.Equals("devenv", StringComparison.OrdinalIgnoreCase))
                     {
                         logger?.LogInformation($"PipeClientHelper: Found Visual Studio process: {processName} (ID: {processToCheck.Id})");
                         return processToCheck.Id;
                     }
-                    
+
                     // Get parent process
                     var parentPid = GetParentProcessId(processToCheck.Id);
                     if (parentPid == 0 || parentPid == processToCheck.Id)
@@ -1119,7 +1420,7 @@ public static class PipeClientHelper
                         logger?.LogInformation($"PipeClientHelper: Reached top of process tree or circular reference");
                         break;
                     }
-                    
+
                     processToCheck = Process.GetProcessById(parentPid);
                 }
                 catch (ArgumentException)
@@ -1133,32 +1434,32 @@ public static class PipeClientHelper
                     break;
                 }
             }
-            
+
             // Enhanced fallback: If we didn't find devenv.exe in the process tree, look for any running devenv.exe processes
             // and try to match based on solution name in MainWindowTitle
             logger?.LogInformation("PipeClientHelper: Visual Studio not found in process tree, checking for any running devenv.exe processes");
-            
+
             var devenvProcesses = Process.GetProcessesByName("devenv");
             if (devenvProcesses.Length > 0)
             {
                 logger?.LogInformation($"PipeClientHelper: Found {devenvProcesses.Length} running Visual Studio process(es)");
-                
+
                 // Try to extract solution/project names from the test assembly and test methods
                 var candidateSolutionNames = ExtractCandidateSolutionNames(command, logger);
-                
+
                 // Try to find a Visual Studio instance with matching solution name in MainWindowTitle
                 var matchedProcess = FindVisualStudioByMainWindowTitle(devenvProcesses, candidateSolutionNames, logger);
                 if (matchedProcess != null)
                 {
                     return matchedProcess.Id;
                 }
-                
+
                 // Fallback to first Visual Studio process if no title match found
                 var devenvProcess = devenvProcesses[0];
                 logger?.LogInformation($"PipeClientHelper: No MainWindowTitle match found, using first Visual Studio process: devenv.exe (ID: {devenvProcess.Id})");
                 return devenvProcess.Id;
             }
-            
+
             logger?.LogInformation("PipeClientHelper: No Visual Studio process found");
             return null;
         }
@@ -1178,20 +1479,20 @@ public static class PipeClientHelper
     private static List<string> ExtractCandidateSolutionNames(PipeCommand? command, ILogger? logger)
     {
         var candidateNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        
+
         if (command == null)
         {
             logger?.LogInformation("PipeClientHelper: No command provided for solution name extraction");
             return candidateNames.ToList();
         }
-        
+
         try
         {
             // Extract from test assembly path
             if (!string.IsNullOrEmpty(command.TestAssembly))
             {
                 logger?.LogInformation($"PipeClientHelper: Extracting solution names from test assembly: {command.TestAssembly}");
-                
+
                 // Get assembly file name without extension
                 var assemblyFileName = Path.GetFileNameWithoutExtension(command.TestAssembly);
                 if (!string.IsNullOrEmpty(assemblyFileName))
@@ -1199,7 +1500,7 @@ public static class PipeClientHelper
                     candidateNames.Add(assemblyFileName);
                     logger?.LogInformation($"PipeClientHelper: Added candidate from assembly name: {assemblyFileName}");
                 }
-                
+
                 // Extract solution name from path segments (look for .sln in parent directories)
                 var directory = Path.GetDirectoryName(command.TestAssembly);
                 while (!string.IsNullOrEmpty(directory))
@@ -1218,16 +1519,16 @@ public static class PipeClientHelper
                     directory = Path.GetDirectoryName(directory);
                 }
             }
-            
+
             // Extract from test method namespaces
             if (command.TestMethods != null && command.TestMethods.Length > 0)
             {
                 logger?.LogInformation($"PipeClientHelper: Extracting solution names from {command.TestMethods.Length} test method(s)");
-                
+
                 foreach (var testMethod in command.TestMethods)
                 {
                     if (string.IsNullOrEmpty(testMethod)) continue;
-                    
+
                     // Extract namespace parts from fully qualified test name
                     // Format is typically: Namespace.ClassName.MethodName
                     var parts = testMethod.Split('.');
@@ -1236,26 +1537,26 @@ public static class PipeClientHelper
                         // Try different combinations of namespace parts
                         var rootNamespace = parts[0];
                         candidateNames.Add(rootNamespace);
-                        
+
                         // Try first two parts combined
                         if (parts.Length >= 2)
                         {
                             var combinedNamespace = $"{parts[0]}.{parts[1]}";
                             candidateNames.Add(combinedNamespace);
                         }
-                        
+
                         logger?.LogInformation($"PipeClientHelper: Added candidates from test method namespace: {rootNamespace}");
                     }
                 }
             }
-            
+
             logger?.LogInformation($"PipeClientHelper: Extracted {candidateNames.Count} candidate solution names: {string.Join(", ", candidateNames)}");
         }
         catch (Exception ex)
         {
             logger?.LogInformation($"PipeClientHelper: Error extracting candidate solution names: {ex.Message}");
         }
-        
+
         return candidateNames.ToList();
     }
 
@@ -1273,22 +1574,22 @@ public static class PipeClientHelper
             logger?.LogInformation("PipeClientHelper: No candidate solution names to match against");
             return null;
         }
-        
+
         foreach (var process in devenvProcesses)
         {
             try
             {
                 process.Refresh(); // Refresh to get current window title
                 var mainWindowTitle = process.MainWindowTitle;
-                
+
                 if (string.IsNullOrEmpty(mainWindowTitle))
                 {
                     logger?.LogInformation($"PipeClientHelper: Visual Studio process {process.Id} has no main window title");
                     continue;
                 }
-                
+
                 logger?.LogInformation($"PipeClientHelper: Checking Visual Studio process {process.Id} with title: '{mainWindowTitle}'");
-                
+
                 // Check if any candidate solution name appears in the window title
                 foreach (var candidateName in candidateSolutionNames)
                 {
@@ -1305,7 +1606,7 @@ public static class PipeClientHelper
                 continue;
             }
         }
-        
+
         logger?.LogInformation("PipeClientHelper: No Visual Studio process found with matching MainWindowTitle");
         return null;
     }
@@ -1340,7 +1641,7 @@ public static class PipeClientHelper
         {
             // WMI not available or other error
         }
-        
+
         return 0;
     }
 }

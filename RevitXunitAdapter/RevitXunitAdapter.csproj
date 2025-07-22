@@ -10,6 +10,9 @@
     <!-- CRITICAL: Must have .TestAdapter.dll in the name for VS Test Platform to discover it -->
     <AssemblyName>RevitXunit.TestAdapter</AssemblyName>
     
+    <!-- Default RevitVersion if not defined elsewhere -->
+    <RevitVersion Condition="'$(RevitVersion)' == ''">2025</RevitVersion>
+    
     <!-- NuGet Package Properties -->
     <PackageId>RevitXunit.TestAdapter</PackageId>
     <PackageVersion>$(RevitVersion).0.0</PackageVersion>
@@ -54,6 +57,16 @@
       <PrivateAssets>all</PrivateAssets>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>
+    <!-- Add RevitAddin.Xunit for content inclusion -->
+    <ProjectReference Include="..\RevitAddin.Xunit\RevitAddin.Xunit.csproj">
+      <PrivateAssets>all</PrivateAssets>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+    <!-- Add RevitTestFramework.Common for manifest generation tool -->
+    <ProjectReference Include="..\RevitTestFramework.Common\RevitTestFramework.Common.csproj">
+      <PrivateAssets>all</PrivateAssets>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
   </ItemGroup>
 
   <!-- Include README in NuGet package -->
@@ -76,6 +89,15 @@
     
     <!-- Assemblies in lib folder (consumer reference) -->
     <None Include="$(OutputPath)RevitTestFramework.Xunit.Contracts.dll" Pack="true" PackagePath="lib\$(TargetFramework)\RevitTestFramework.Xunit.Contracts.dll" />    
+  </ItemGroup>
+
+  <!-- Include RevitAddin content files for automatic installation -->
+  <ItemGroup>
+    <!-- RevitAddin.Xunit assembly and dependencies in content folder -->
+    <None Include="..\RevitAddin.Xunit\bin\$(Configuration)\net8.0\*.*" Pack="true" PackagePath="content\RevitAddin\" />
+    
+    <!-- RevitTestFramework assembly and dependencies in content folder -->
+    <None Include="..\RevitTestFramework.Common\bin\$(Configuration)\net8.0\*.*" Pack="true" PackagePath="content\RevitAddin\" />
   </ItemGroup>
   
 </Project>
