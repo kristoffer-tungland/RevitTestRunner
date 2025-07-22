@@ -21,10 +21,11 @@
     <PackageProjectUrl>https://github.com/kristoffer-tungland/RevitTestRunner</PackageProjectUrl>
     <RepositoryUrl>https://github.com/kristoffer-tungland/RevitTestRunner</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <DevelopmentDependency>true</DevelopmentDependency>
     
     <!-- Package configuration -->
     <IncludeBuildOutput>true</IncludeBuildOutput>
-    <BuildOutputTargetFolder>build\$(TargetFramework)</BuildOutputTargetFolder>
+    <BuildOutputTargetFolder>build</BuildOutputTargetFolder>
     <!-- Allow xunit to be included as a dependency for consumers -->
     <SuppressDependenciesWhenPacking>false</SuppressDependenciesWhenPacking>
   </PropertyGroup>
@@ -49,6 +50,10 @@
     <ProjectReference Include="..\RevitTestFramework.Xunit.Contracts\RevitTestFramework.Xunit.Contracts.csproj">
       <PrivateAssets>all</PrivateAssets>
     </ProjectReference>
+    <ProjectReference Include="..\RevitDebuggerHelper\RevitDebuggerHelper.csproj">
+      <PrivateAssets>all</PrivateAssets>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
   </ItemGroup>
 
   <!-- Include README in NuGet package -->
@@ -58,11 +63,16 @@
 
   <!-- Manually include files in both build and lib folders -->
   <ItemGroup>
+    <!-- MSBuild props file for automatic imports -->
+    <None Include="revitxunit.testadapter.props" Pack="true" PackagePath="build\$(TargetFramework)\revitxunit.testadapter.props" />
     <!-- Files for build folder (test adapter runtime) -->
-    <None Include="$(OutputPath)RevitTestFramework.Contracts.dll" Pack="true" PackagePath="build\$(TargetFramework)\$(TargetFramework)\RevitTestFramework.Contracts.dll" />
+    <None Include="$(OutputPath)RevitTestFramework.Contracts.dll" Pack="true" PackagePath="build\$(TargetFramework)\RevitTestFramework.Contracts.dll" />
+    <None Include="$(OutputPath)RevitAdapterCommon.dll" Pack="true" PackagePath="build\$(TargetFramework)\RevitAdapterCommon.dll" />
+    <!-- Include RevitDebuggerHelper.exe in build folder so it gets copied to output -->
+    <None Include="..\RevitDebuggerHelper\bin\$(Configuration)\net48\RevitDebuggerHelper.exe" Pack="true" PackagePath="build\$(TargetFramework)\RevitDebuggerHelper.exe" />
     
     <!-- Assemblies in lib folder (consumer reference) -->
-    <None Include="$(OutputPath)RevitTestFramework.Xunit.Contracts.dll" Pack="true" PackagePath="lib\$(TargetFramework)\RevitTestFramework.Xunit.Contracts.dll" />
+    <None Include="$(OutputPath)RevitTestFramework.Xunit.Contracts.dll" Pack="true" PackagePath="lib\$(TargetFramework)\RevitTestFramework.Xunit.Contracts.dll" />    
   </ItemGroup>
-
+  
 </Project>
