@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "RevitDebuggerHelper": {
+      "commandName": "Project"
+    },
+    "With arguments": {
+      "commandName": "Project",
+      "commandLineArgs": "15172 --vs-process 39620"
+    }
+  }
+}

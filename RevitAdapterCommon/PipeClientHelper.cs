@@ -709,7 +709,7 @@ public static class PipeClientHelper
         {
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "RevitDebuggerHelper.exe"),
             // Navigate from test assembly location to workspace root, then to helper
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "RevitDebuggerHelper", "bin", configuration, "RevitDebuggerHelper.exe"),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "RevitDebuggerHelper", "bin", configuration, "net48", "RevitDebuggerHelper.exe"),
             "RevitDebuggerHelper.exe", // Try PATH
         };
 
@@ -791,7 +791,13 @@ public static class PipeClientHelper
                 return;
             }
 
-            var result = ExecuteDebuggerHelper(helperPath, processId.ToString(), 10000, logger);
+            // Try to find the Visual Studio process that initiated the test run
+            var vsProcessId = FindVisualStudioProcessForTestRun(logger);
+            var arguments = vsProcessId.HasValue 
+                ? $"{processId} --vs-process {vsProcessId.Value}"
+                : processId.ToString();
+            
+            var result = ExecuteDebuggerHelper(helperPath, arguments, 10000, logger);
 
             if (result.Success)
             {
@@ -847,7 +853,13 @@ public static class PipeClientHelper
             {
                 try
                 {
-                    var result = ExecuteDebuggerHelper(helperPath, $"--detach {processId}", 5000, logger);
+                    // Try to find the Visual Studio process that initiated the test run
+                    var vsProcessId = FindVisualStudioProcessForTestRun(logger);
+                    var arguments = vsProcessId.HasValue 
+                        ? $"--detach {processId} --vs-process {vsProcessId.Value}"
+                        : $"--detach {processId}";
+                    
+                    var result = ExecuteDebuggerHelper(helperPath, arguments, 5000, logger);
 
                     if (result.Success)
                     {
@@ -901,5 +913,119 @@ public static class PipeClientHelper
         {
             logger?.LogInformation($"PipeClientHelper: Error starting debugger helper for detachment: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Attempts to find the Visual Studio process that initiated the current test run
+    /// by walking up the process tree and looking for devenv.exe
+    /// </summary>
+    /// <param name="logger">Optional logger for diagnostic information</param>
+    /// <returns>Visual Studio process ID if found, null otherwise</returns>
+    private static int? FindVisualStudioProcessForTestRun(ILogger? logger)
+    {
+        try
+        {
+            logger?.LogInformation("PipeClientHelper: Attempting to find Visual Studio process that initiated test run");
+            
+            var currentProcess = Process.GetCurrentProcess();
+            var currentProcessId = currentProcess.Id;
+            
+            logger?.LogInformation($"PipeClientHelper: Starting from current process: {currentProcess.ProcessName} (ID: {currentProcessId})");
+            
+            // Walk up the process tree to find devenv.exe
+            var checkedProcesses = new HashSet<int>();
+            var processToCheck = currentProcess;
+            
+            while (processToCheck != null && !checkedProcesses.Contains(processToCheck.Id))
+            {
+                checkedProcesses.Add(processToCheck.Id);
+                
+                try
+                {
+                    var processName = processToCheck.ProcessName;
+                    logger?.LogInformation($"PipeClientHelper: Checking process: {processName} (ID: {processToCheck.Id})");
+                    
+                    // Check if this is a Visual Studio process
+                    if (processName.Equals("devenv", StringComparison.OrdinalIgnoreCase))
+                    {
+                        logger?.LogInformation($"PipeClientHelper: Found Visual Studio process: {processName} (ID: {processToCheck.Id})");
+                        return processToCheck.Id;
+                    }
+                    
+                    // Get parent process
+                    var parentPid = GetParentProcessId(processToCheck.Id);
+                    if (parentPid == 0 || parentPid == processToCheck.Id)
+                    {
+                        logger?.LogInformation($"PipeClientHelper: Reached top of process tree or circular reference");
+                        break;
+                    }
+                    
+                    processToCheck = Process.GetProcessById(parentPid);
+                }
+                catch (ArgumentException)
+                {
+                    logger?.LogInformation($"PipeClientHelper: Parent process not found or exited");
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogInformation($"PipeClientHelper: Error accessing process: {ex.Message}");
+                    break;
+                }
+            }
+            
+            // If we didn't find devenv.exe in the process tree, look for any running devenv.exe processes
+            logger?.LogInformation("PipeClientHelper: Visual Studio not found in process tree, checking for any running devenv.exe processes");
+            
+            var devenvProcesses = Process.GetProcessesByName("devenv");
+            if (devenvProcesses.Length > 0)
+            {
+                var devenvProcess = devenvProcesses[0];
+                logger?.LogInformation($"PipeClientHelper: Found running Visual Studio process: devenv.exe (ID: {devenvProcess.Id})");
+                return devenvProcess.Id;
+            }
+            
+            logger?.LogInformation("PipeClientHelper: No Visual Studio process found");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogInformation($"PipeClientHelper: Error finding Visual Studio process: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the parent process ID for a given process ID using WMI
+    /// </summary>
+    /// <param name="processId">The process ID</param>
+    /// <returns>Parent process ID, or 0 if not found</returns>
+    private static int GetParentProcessId(int processId)
+    {
+        try
+        {
+            // Use WMI to get parent process ID
+            using (var searcher = new System.Management.ManagementObjectSearcher(
+                $"SELECT ParentProcessId FROM Win32_Process WHERE ProcessId = {processId}"))
+            {
+                using (var results = searcher.Get())
+                {
+                    foreach (System.Management.ManagementObject result in results)
+                    {
+                        var parentPid = result["ParentProcessId"];
+                        if (parentPid != null && uint.TryParse(parentPid.ToString(), out uint pid))
+                        {
+                            return (int)pid;
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // WMI not available or other error
+        }
+        
+        return 0;
     }
 }

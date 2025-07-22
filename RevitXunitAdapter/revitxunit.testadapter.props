@@ -21,6 +21,16 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>False</Visible>
     </None>
+    <None Include="$(MSBuildThisFileDirectory)System.Management.dll">
+      <Link>System.Management.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>False</Visible>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)System.CodeDom.dll">
+      <Link>System.CodeDom.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>False</Visible>
+    </None>
     <ProjectCapability Include="TestContainer" />
   </ItemGroup>
 </Project>

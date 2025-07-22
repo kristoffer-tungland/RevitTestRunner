@@ -5,6 +5,11 @@
     <Nullable>enable</Nullable>
     <IsTestProject>false</IsTestProject>
   </PropertyGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="System.Management" Version="4.7.0" />
+  </ItemGroup>
+  
   <ItemGroup>
     <ProjectReference Include="..\RevitTestFramework.Contracts\RevitTestFramework.Contracts.csproj" />
   </ItemGroup>

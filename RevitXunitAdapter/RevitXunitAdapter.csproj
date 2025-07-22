@@ -68,6 +68,9 @@
     <!-- Files for build folder (test adapter runtime) -->
     <None Include="$(OutputPath)RevitTestFramework.Contracts.dll" Pack="true" PackagePath="build\$(TargetFramework)\RevitTestFramework.Contracts.dll" />
     <None Include="$(OutputPath)RevitAdapterCommon.dll" Pack="true" PackagePath="build\$(TargetFramework)\RevitAdapterCommon.dll" />
+    
+    <None Include="$(OutputPath)System.Management.dll" Pack="true" PackagePath="build\$(TargetFramework)\System.Management.dll" />
+    <None Include="$(OutputPath)System.CodeDom.dll" Pack="true" PackagePath="build\$(TargetFramework)\System.CodeDom.dll" />
     <!-- Include RevitDebuggerHelper.exe in build folder so it gets copied to output -->
     <None Include="..\RevitDebuggerHelper\bin\$(Configuration)\net48\RevitDebuggerHelper.exe" Pack="true" PackagePath="build\$(TargetFramework)\RevitDebuggerHelper.exe" />
     
