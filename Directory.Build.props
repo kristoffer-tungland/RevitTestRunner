@@ -1,23 +1,26 @@
 <Project>
+  <!-- Global properties available to all projects -->
+  <PropertyGroup>
+    <!-- Revit-specific properties - available to all projects -->
+    <RevitVersion>2025</RevitVersion>
+    
+    <!-- Product version - now includes RevitVersion.Minor.Patch format for ALL projects -->
+    <Version>$(RevitVersion).0.0</Version>
+    <AssemblyVersion>$(Version)</AssemblyVersion>
+    <FileVersion>$(Version)</FileVersion>
+  </PropertyGroup>
+  
   <!-- Define which projects are controlled by this props file -->
   <PropertyGroup>
     <IsRevitFrameworkProject>false</IsRevitFrameworkProject>
     <IsRevitFrameworkProject Condition="$(MSBuildProjectName.StartsWith('RevitTestFramework.')) OR $(MSBuildProjectName.StartsWith('RevitAddin.'))">true</IsRevitFrameworkProject>
   </PropertyGroup>
   
-  <!-- Version information and common properties only for framework projects -->
+  <!-- Common properties only for framework projects -->
   <PropertyGroup Condition="'$(IsRevitFrameworkProject)' == 'true'">
-    <!-- Product version -->
-    <Version>1.0.0</Version>
-    <AssemblyVersion>$(Version)</AssemblyVersion>
-    <FileVersion>$(Version)</FileVersion>
-    
     <!-- Common properties for all projects -->
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    
-    <!-- Revit-specific properties -->
-    <RevitVersion>2025</RevitVersion>
     
     <!-- Default target framework is net8.0 -->
     <TargetFramework>net8.0</TargetFramework>
@@ -30,20 +33,14 @@
   <PropertyGroup Condition="'$(IsRevitFrameworkProject)' == 'true' AND $(MSBuildProjectName.StartsWith('RevitAddin.'))">
     <PlatformTarget>x64</PlatformTarget>
     <IsTestProject>false</IsTestProject>
-    <!-- Set AssemblyName to ProjectName.Version only for RevitAddin projects -->
-    <AssemblyName>$(ProjectName).$(RevitVersion).$(Version)</AssemblyName>
+    <!-- Set AssemblyName to ProjectName.Version only (version now contains RevitVersion) -->
+    <AssemblyName>$(ProjectName).$(Version)</AssemblyName>
   </PropertyGroup>
   
   <!-- Properties for test framework projects -->
   <PropertyGroup Condition="'$(IsRevitFrameworkProject)' == 'true' AND $(MSBuildProjectName.StartsWith('RevitTestFramework.'))">
-    <IsTestProject>false</IsTestProject>
     <PlatformTarget>x64</PlatformTarget>
+    <IsTestProject>false</IsTestProject>
   </PropertyGroup>
-
-  <!-- Properties for adapter projects and related that target .NET 9 -->
-  <PropertyGroup Condition="$(MSBuildProjectName) == 'RevitAdapterCommon' OR
-                            $(MSBuildProjectName) == 'RevitNUnitAdapter' OR
-                            $(MSBuildProjectName) == 'RevitXunitAdapter'">
-    <TargetFramework>net9.0</TargetFramework>
-  </PropertyGroup>
+  
 </Project>

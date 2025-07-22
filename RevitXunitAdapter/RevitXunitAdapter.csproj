@@ -10,36 +10,94 @@
     <!-- CRITICAL: Must have .TestAdapter.dll in the name for VS Test Platform to discover it -->
     <AssemblyName>RevitXunit.TestAdapter</AssemblyName>
     
+    <!-- Default RevitVersion if not defined elsewhere -->
+    <RevitVersion Condition="'$(RevitVersion)' == ''">2025</RevitVersion>
+    
     <!-- NuGet Package Properties -->
     <PackageId>RevitXunit.TestAdapter</PackageId>
-    <PackageVersion>1.0.0</PackageVersion>
+    <PackageVersion>$(RevitVersion).0.0</PackageVersion>
     <Title>Revit XUnit Test Adapter</Title>
-    <Description>Test adapter for running XUnit tests in Autodesk Revit</Description>
-    <Authors>Your Name</Authors>
-    <Company>Your Company</Company>
-    <PackageTags>revit;xunit;testing;adapter</PackageTags>
+    <Description>Test adapter for running XUnit tests in Autodesk Revit. Enables seamless integration testing of Revit add-ins with automatic model loading, full API access, and Visual Studio Test Explorer integration.</Description>
+    <Authors>Kristoffer Tungland</Authors>
+    <PackageTags>revit;xunit;testing;adapter;bim;autodesk;integration-testing</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/kristoffer-tungland/RevitTestRunner</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/kristoffer-tungland/RevitTestRunner</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <DevelopmentDependency>true</DevelopmentDependency>
     
-    <!-- Package the adapter for NuGet -->
-    <IncludeBuildOutput>false</IncludeBuildOutput>
-    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <!-- Package configuration -->
+    <IncludeBuildOutput>true</IncludeBuildOutput>
+    <BuildOutputTargetFolder>build</BuildOutputTargetFolder>
+    <!-- Allow xunit to be included as a dependency for consumers -->
+    <SuppressDependenciesWhenPacking>false</SuppressDependenciesWhenPacking>
   </PropertyGroup>
   
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <!-- Test adapter dependencies - private assets so they don't become NuGet dependencies -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="xunit.runner.utility" Version="2.9.3">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    
+    <!-- xunit dependency for consumers - this will be included as a NuGet dependency -->
     <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.utility" Version="2.9.3" />
   </ItemGroup>
   
   <ItemGroup>
-    <ProjectReference Include="..\RevitAdapterCommon\RevitAdapterCommon.csproj" />
-    <ProjectReference Include="..\RevitTestFramework.Xunit\RevitTestFramework.Xunit.csproj" />
+    <ProjectReference Include="..\RevitAdapterCommon\RevitAdapterCommon.csproj">
+      <PrivateAssets>all</PrivateAssets>
+    </ProjectReference>
+    <ProjectReference Include="..\RevitTestFramework.Xunit.Contracts\RevitTestFramework.Xunit.Contracts.csproj">
+      <PrivateAssets>all</PrivateAssets>
+    </ProjectReference>
+    <ProjectReference Include="..\RevitDebuggerHelper\RevitDebuggerHelper.csproj">
+      <PrivateAssets>all</PrivateAssets>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+    <!-- Add RevitAddin.Xunit for content inclusion -->
+    <ProjectReference Include="..\RevitAddin.Xunit\RevitAddin.Xunit.csproj">
+      <PrivateAssets>all</PrivateAssets>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+    <!-- Add RevitTestFramework.Common for manifest generation tool -->
+    <ProjectReference Include="..\RevitTestFramework.Common\RevitTestFramework.Common.csproj">
+      <PrivateAssets>all</PrivateAssets>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
   </ItemGroup>
 
-  <!-- Package the test adapter files correctly for NuGet -->
+  <!-- Include README in NuGet package -->
   <ItemGroup>
-    <None Include="$(OutputPath)\RevitXunit.TestAdapter.dll" Pack="true" PackagePath="build\net8.0\RevitXunit.TestAdapter.dll" />
-    <None Include="$(OutputPath)\RevitAdapterCommon.dll" Pack="true" PackagePath="build\net8.0\RevitAdapterCommon.dll" />
-    <None Include="$(OutputPath)\RevitTestFramework.Xunit.*.dll" Pack="true" PackagePath="build\net8.0\" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
+  <!-- Manually include files in both build and lib folders -->
+  <ItemGroup>
+    <!-- MSBuild props file for automatic imports -->
+    <None Include="revitxunit.testadapter.props" Pack="true" PackagePath="build\$(TargetFramework)\revitxunit.testadapter.props" />
+    <!-- Files for build folder (test adapter runtime) -->
+    <None Include="$(OutputPath)RevitTestFramework.Contracts.dll" Pack="true" PackagePath="build\$(TargetFramework)\RevitTestFramework.Contracts.dll" />
+    <None Include="$(OutputPath)RevitAdapterCommon.dll" Pack="true" PackagePath="build\$(TargetFramework)\RevitAdapterCommon.dll" />
+    
+    <None Include="$(OutputPath)System.Management.dll" Pack="true" PackagePath="build\$(TargetFramework)\System.Management.dll" />
+    <None Include="$(OutputPath)System.CodeDom.dll" Pack="true" PackagePath="build\$(TargetFramework)\System.CodeDom.dll" />
+    <!-- Include RevitDebuggerHelper.exe in build folder so it gets copied to output -->
+    <None Include="..\RevitDebuggerHelper\bin\$(Configuration)\net48\RevitDebuggerHelper.exe" Pack="true" PackagePath="build\$(TargetFramework)\RevitDebuggerHelper.exe" />
+    
+    <!-- Assemblies in lib folder (consumer reference) -->
+    <None Include="$(OutputPath)RevitTestFramework.Xunit.Contracts.dll" Pack="true" PackagePath="lib\$(TargetFramework)\RevitTestFramework.Xunit.Contracts.dll" />    
+  </ItemGroup>
+
+  <!-- Include RevitAddin content files for automatic installation -->
+  <ItemGroup>
+    <!-- RevitAddin.Xunit assembly and dependencies in content folder -->
+    <None Include="..\RevitAddin.Xunit\bin\$(Configuration)\net8.0\*.*" Pack="true" PackagePath="content\RevitAddin\" />
+    
+    <!-- RevitTestFramework assembly and dependencies in content folder -->
+    <None Include="..\RevitTestFramework.Common\bin\$(Configuration)\net8.0\*.*" Pack="true" PackagePath="content\RevitAddin\" />
+  </ItemGroup>
+  
 </Project>

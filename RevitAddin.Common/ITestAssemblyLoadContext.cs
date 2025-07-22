@@ -1,4 +1,5 @@
 ﻿using Autodesk.Revit.UI;
+using RevitTestFramework.Contracts;
 using System.Reflection;
 
 namespace RevitAddin.Common

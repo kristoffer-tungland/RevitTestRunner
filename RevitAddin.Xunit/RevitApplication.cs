@@ -1,9 +1,8 @@
 using Autodesk.Revit.UI;
 using RevitAddin.Common;
 using RevitTestFramework.Common;
-using System;
+using RevitTestFramework.Contracts;
 using System.Diagnostics;
-using System.IO;
 using System.Reflection;
 
 namespace RevitAddin.Xunit;
@@ -15,35 +14,76 @@ public class RevitApplication : IExternalApplication
 
     public Result OnStartup(UIControlledApplication application)
     {
-#if DEBUG
-        Debugger.Launch();
-#endif
-        // Register assembly resolution handler
-        AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
+        try
+        {
+            // Register assembly resolution handler
+            AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
 
-        // Log startup info
-        string addinLocation = Assembly.GetExecutingAssembly().Location;
-        Trace.WriteLine($"RevitAddin.Xunit starting from: {addinLocation}");
+            // Log startup info
+            string addinLocation = Assembly.GetExecutingAssembly().Location;
+            Trace.WriteLine($"RevitAddin.Xunit starting from: {addinLocation}");
 
-        // Use RevitTask to manage UI thread execution
-        _revitTask = new RevitTask();
-        var pipeName = PipeConstants.PipeNamePrefix + Process.GetCurrentProcess().Id;
-        _server = new PipeServer(pipeName, _revitTask, path => new XunitTestAssemblyLoadContext(path));
-        _server.Start();
-        return Result.Succeeded;
+            // Extract Revit version from the application
+            var revitVersion = application.ControlledApplication.VersionNumber;
+            Trace.WriteLine($"RevitAddin.Xunit detected Revit version: {revitVersion}");
+
+            // Use RevitTask to manage UI thread execution
+            _revitTask = new RevitTask();
+            var pipeName = PipeNaming.GetCurrentProcessPipeName();
+            Trace.WriteLine($"RevitAddin.Xunit using pipe name: {pipeName}");
+            
+            _server = new PipeServer(pipeName, _revitTask, path => new XunitTestAssemblyLoadContext(path));
+            _server.Start();
+            
+            Trace.WriteLine("RevitAddin.Xunit startup completed successfully");
+            return Result.Succeeded;
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"RevitAddin.Xunit startup failed: {ex.Message}");
+            Trace.WriteLine($"Stack trace: {ex}");
+            
+            // Clean up any partially initialized resources
+            try
+            {
+                _server?.Dispose();
+                _revitTask?.Dispose();
+            }
+            catch (Exception cleanupEx)
+            {
+                Trace.WriteLine($"Error during startup cleanup: {cleanupEx.Message}");
+            }
+            
+            return Result.Failed;
+        }
     }
 
     public Result OnShutdown(UIControlledApplication application)
     {
-        // Unregister assembly resolution handler
-        AppDomain.CurrentDomain.AssemblyResolve -= CurrentDomain_AssemblyResolve;
+        try
+        {
+            Trace.WriteLine("RevitAddin.Xunit shutdown starting");
+            
+            // Unregister assembly resolution handler
+            AppDomain.CurrentDomain.AssemblyResolve -= CurrentDomain_AssemblyResolve;
 
-        _server?.Dispose();
-        _revitTask?.Dispose();
-        return Result.Succeeded;
+            _server?.Dispose();
+            _revitTask?.Dispose();
+            
+            Trace.WriteLine("RevitAddin.Xunit shutdown completed successfully");
+            return Result.Succeeded;
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"RevitAddin.Xunit shutdown failed: {ex.Message}");
+            Trace.WriteLine($"Stack trace: {ex}");
+            
+            // Even if shutdown fails, we should return Succeeded to avoid preventing Revit from closing
+            return Result.Succeeded;
+        }
     }
 
-    private Assembly? CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
+    private Assembly? CurrentDomain_AssemblyResolve(object? sender, ResolveEventArgs args)
     {
         try
         {

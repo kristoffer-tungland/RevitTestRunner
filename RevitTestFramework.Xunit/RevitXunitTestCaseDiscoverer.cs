@@ -3,14 +3,9 @@ using Xunit.Sdk;
 
 namespace RevitTestFramework.Xunit;
 
-public class RevitXunitTestCaseDiscoverer : IXunitTestCaseDiscoverer
+public class RevitXunitTestCaseDiscoverer(IMessageSink diagnosticMessageSink) : IXunitTestCaseDiscoverer
 {
-    private readonly IMessageSink _diagnosticMessageSink;
-
-    public RevitXunitTestCaseDiscoverer(IMessageSink diagnosticMessageSink)
-    {
-        _diagnosticMessageSink = diagnosticMessageSink;
-    }
+    private readonly IMessageSink _diagnosticMessageSink = diagnosticMessageSink;
 
     public IEnumerable<IXunitTestCase> Discover(ITestFrameworkDiscoveryOptions discoveryOptions,
                                                 ITestMethod testMethod,

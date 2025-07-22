@@ -1,25 +1,29 @@
 using Xunit;
-using Xunit.Abstractions;
 using Xunit.Sdk;
-using RevitTestFramework.Common;
 
 namespace RevitTestFramework.Xunit;
 
 [XunitTestCaseDiscoverer("RevitTestFramework.Xunit.RevitXunitTestCaseDiscoverer", "RevitTestFramework.Xunit")]
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-public class RevitXunitTestModelAttribute : FactAttribute
+public class RevitFactAttribute : FactAttribute
 {
     public string? ProjectGuid { get; }
     public string? ModelGuid { get; }
     public string? LocalPath { get; }
 
-    public RevitXunitTestModelAttribute(string projectGuid, string modelGuid)
+    public RevitFactAttribute()
+    {
+        // Empty constructor for tests that don't need a specific model
+        // or want to use the currently active model in Revit
+    }
+
+    public RevitFactAttribute(string projectGuid, string modelGuid)
     {
         ProjectGuid = projectGuid;
         ModelGuid = modelGuid;
     }
 
-    public RevitXunitTestModelAttribute(string localPath)
+    public RevitFactAttribute(string localPath)
     {
         LocalPath = localPath;
     }

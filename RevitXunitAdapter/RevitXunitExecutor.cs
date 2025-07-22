@@ -2,6 +2,8 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Adapter;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 using RevitAdapterCommon;
+using RevitTestFramework.Contracts;
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace RevitXunitAdapter
@@ -46,7 +48,7 @@ namespace RevitXunitAdapter
 
                 frameworkHandle.SendMessage(TestMessageLevel.Informational, $"RevitXunitExecutor: Running all tests from {assembly}");
 
-                SendRunCommandStreaming(assembly, Array.Empty<string>(), frameworkHandle, _cts.Token);
+                SendRunCommandStreaming(assembly, [], frameworkHandle, _cts.Token);
             }
             catch (Exception ex)
             {
@@ -62,14 +64,24 @@ namespace RevitXunitAdapter
 
                 var command = new PipeCommand
                 {
-                    Command = "RunXunitTests",
+                    Command = "RunTests",
                     TestAssembly = assembly,
                     TestMethods = methods,
-                    CancelPipe = "RevitCancel_" + Guid.NewGuid().ToString("N")
+                    CancelPipe = "RevitCancel_" + Guid.NewGuid().ToString("N"),
+                    Debug = Debugger.IsAttached
                 };
+
+                if (command.Debug)
+                {
+                    frameworkHandle.SendMessage(TestMessageLevel.Informational, "RevitXunitExecutor: Debugger detected - enabling debug mode for Revit test execution");
+                }
 
                 frameworkHandle.SendMessage(TestMessageLevel.Informational, "RevitXunitExecutor: Sending command to Revit via named pipe");
 
+                // For now, hardcode Revit version as "2025" as requested
+                const string revitVersion = "2025";
+                
+                // Pass the framework handle directly - it will be converted to a logger automatically
                 PipeClientHelper.SendCommandStreaming(command, line =>
                 {
                     if (line == "END")
@@ -104,7 +116,7 @@ namespace RevitXunitAdapter
                     {
                         frameworkHandle.SendMessage(TestMessageLevel.Error, $"RevitXunitExecutor: Error processing result line '{line}': {ex.Message}");
                     }
-                }, token);
+                }, token, revitVersion, frameworkHandle.ToLogger());
             }
             catch (Exception ex)
             {

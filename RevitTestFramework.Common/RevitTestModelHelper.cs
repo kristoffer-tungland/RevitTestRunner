@@ -7,69 +7,127 @@ namespace RevitTestFramework.Common;
 public static class RevitTestModelHelper
 {
 
-    public static Document OpenModel(UIApplication uiApp, string? localPath, string? projectGuid, string? modelGuid)
+    public static Document? OpenModel(UIApplication uiApp, string? localPath, string? projectGuid, string? modelGuid)
     {
+        // If no parameters are provided, return the currently active document
+        if (string.IsNullOrEmpty(localPath) && string.IsNullOrEmpty(projectGuid) && string.IsNullOrEmpty(modelGuid))
+        {
+            var activeDoc = uiApp.ActiveUIDocument?.Document;
+            if (activeDoc == null)
+            {
+                Debug.WriteLine("No active document is currently open in Revit.");
+                return null;
+            }
+            
+            Debug.WriteLine($"Using currently active model: {activeDoc.Title}");
+            return activeDoc;
+        }
+        
         if (string.IsNullOrEmpty(localPath) && (string.IsNullOrEmpty(projectGuid) || string.IsNullOrEmpty(modelGuid)))
         {
             throw new ArgumentException("Either localPath or both projectGuid and modelGuid must be provided.");
         }
-        if (!string.IsNullOrEmpty(localPath))
+        
+        try
         {
-            return OpenLocalModel(uiApp, localPath);
+            if (!string.IsNullOrEmpty(localPath))
+            {
+                return OpenLocalModel(uiApp, localPath);
+            }
+            else
+            {
+                return OpenCloudModel(uiApp, projectGuid!, modelGuid!);
+            }
         }
-        else
+        catch (Exception ex) when (!(ex is ArgumentException))
         {
-            return OpenCloudModel(uiApp, projectGuid!, modelGuid!);
+            // Wrap with more specific context about which operation failed
+            var operation = !string.IsNullOrEmpty(localPath) ? "local model" : "cloud model";
+            var identifier = !string.IsNullOrEmpty(localPath) ? localPath : $"{projectGuid}:{modelGuid}";
+            throw new InvalidOperationException($"Failed to open {operation} '{identifier}': {ex.Message}", ex);
         }
     }
 
     private static Document OpenLocalModel(UIApplication uiApp, string localPath)
     {
-        if (!File.Exists(localPath))
+        try
         {
-            throw new FileNotFoundException($"Revit model file not found at path: {localPath}");
+            var primaryVersionNumber = uiApp.Application.VersionNumber;
+            
+            // Replace [RevitVersion] placeholder with actual version number
+            var resolvedPath = localPath.Replace("[RevitVersion]", primaryVersionNumber);
+            
+            Debug.WriteLine($"Original path: {localPath}");
+            if (resolvedPath != localPath)
+            {
+                Debug.WriteLine($"Resolved path: {resolvedPath}");
+            }
+
+            if (!File.Exists(resolvedPath))
+            {
+                throw new FileNotFoundException($"Revit model file not found at path: {resolvedPath}");
+            }
+
+            var modelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(resolvedPath);
+            var app = uiApp.Application;
+
+            var opts = new OpenOptions();
+            opts.DetachFromCentralOption = DetachFromCentralOption.DoNotDetach;
+            opts.SetOpenWorksetsConfiguration(new WorksetConfiguration(WorksetConfigurationOption.CloseAllWorksets));
+            opts.Audit = false;
+
+            Debug.WriteLine($"Opening local model: {resolvedPath}");
+            var doc = app.OpenDocumentFile(modelPath, opts);
+
+            if (doc == null)
+            {
+                throw new InvalidOperationException($"Revit returned null document when opening local model at: {resolvedPath}");
+            }
+
+            Debug.WriteLine($"Successfully opened local model: {doc.Title}");
+            return doc;
         }
-
-        var modelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(localPath);
-        var app = uiApp.Application;
-
-        var opts = new OpenOptions();
-        opts.DetachFromCentralOption = DetachFromCentralOption.DoNotDetach;
-        opts.SetOpenWorksetsConfiguration(new WorksetConfiguration(WorksetConfigurationOption.CloseAllWorksets));
-        opts.Audit = false;
-
-        Debug.WriteLine($"Opening model on UI thread: {localPath}");
-        var doc = app.OpenDocumentFile(modelPath, opts);
-
-        if (doc == null)
+        catch (Exception ex) when (!(ex is FileNotFoundException))
         {
-            throw new InvalidOperationException($"OpenDocumentFile returned null for path: {localPath}");
+            throw new InvalidOperationException($"Failed to open local model '{localPath}': {ex.Message}", ex);
         }
-
-        Debug.WriteLine($"Successfully opened model on UI thread: {doc.Title}");
-        return doc;
     }
 
     private static Document OpenCloudModel(UIApplication uiApp, string projectGuid, string modelGuid)
     {
-        var projGuid = new Guid(projectGuid);
-        var modGuid = new Guid(modelGuid);
-        var cloudPath = ModelPathUtils.ConvertCloudGUIDsToCloudPath(ModelPathUtils.CloudRegionUS, projGuid, modGuid);
-        var app = uiApp.Application;
-
-        var openOpts = new OpenOptions();
-        openOpts.DetachFromCentralOption = DetachFromCentralOption.DoNotDetach;
-        openOpts.SetOpenWorksetsConfiguration(new WorksetConfiguration(WorksetConfigurationOption.CloseAllWorksets));
-
-        Debug.WriteLine($"Opening cloud model on UI thread: {projectGuid}:{modelGuid}");
-        var doc = app.OpenDocumentFile(cloudPath, openOpts);
-
-        if (doc == null)
+        try
         {
-            throw new InvalidOperationException($"OpenDocumentFile returned null for cloud model: {projectGuid}:{modelGuid}");
-        }
+            if (!Guid.TryParse(projectGuid, out var projGuid))
+            {
+                throw new ArgumentException($"Invalid project GUID format: '{projectGuid}'");
+            }
+            
+            if (!Guid.TryParse(modelGuid, out var modGuid))
+            {
+                throw new ArgumentException($"Invalid model GUID format: '{modelGuid}'");
+            }
 
-        Debug.WriteLine($"Successfully opened cloud model on UI thread: {doc.Title}");
-        return doc;
+            var cloudPath = ModelPathUtils.ConvertCloudGUIDsToCloudPath(ModelPathUtils.CloudRegionUS, projGuid, modGuid);
+            var app = uiApp.Application;
+
+            var openOpts = new OpenOptions();
+            openOpts.DetachFromCentralOption = DetachFromCentralOption.DoNotDetach;
+            openOpts.SetOpenWorksetsConfiguration(new WorksetConfiguration(WorksetConfigurationOption.CloseAllWorksets));
+
+            Debug.WriteLine($"Opening cloud model: {projectGuid}:{modelGuid}");
+            var doc = app.OpenDocumentFile(cloudPath, openOpts);
+
+            if (doc == null)
+            {
+                throw new InvalidOperationException($"Revit returned null document when opening cloud model: {projectGuid}:{modelGuid}");
+            }
+
+            Debug.WriteLine($"Successfully opened cloud model: {doc.Title}");
+            return doc;
+        }
+        catch (Exception ex) when (!(ex is ArgumentException))
+        {
+            throw new InvalidOperationException($"Failed to open cloud model '{projectGuid}:{modelGuid}': {ex.Message}", ex);
+        }
     }
 }

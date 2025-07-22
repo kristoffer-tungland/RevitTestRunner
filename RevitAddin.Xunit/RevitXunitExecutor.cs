@@ -2,11 +2,11 @@ using System.Xml.Linq;
 using Autodesk.Revit.UI;
 using Xunit;
 using Xunit.Abstractions;
-using Xunit.Sdk;
 using RevitAddin.Common;
 using RevitTestFramework.Common;
+using RevitTestFramework.Contracts;
 using System.Text.Json;
-using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace RevitAddin.Xunit;
 
@@ -36,6 +36,36 @@ public static class RevitXunitExecutor
         // Deserialize the command in the isolated context to avoid cross-ALC type issues
         var command = JsonSerializer.Deserialize<PipeCommand>(commandJson)
             ?? throw new InvalidOperationException("Failed to deserialize PipeCommand");
+
+        // Handle debug mode if enabled
+        if (command.Debug)
+        {
+            Debug.WriteLine("RevitXunitExecutor: Debug mode enabled - debugger can now be attached to Revit process");
+            
+            // If debugger is not already attached, provide helpful information
+            if (!Debugger.IsAttached)
+            {
+                var processId = Process.GetCurrentProcess().Id;
+                Debug.WriteLine($"RevitXunitExecutor: To debug tests, attach debugger to Revit.exe process ID: {processId}");
+                
+                // Optional: Launch debugger if possible (requires Just-In-Time debugging enabled)
+                try
+                {
+                    if (Debugger.Launch())
+                    {
+                        Debug.WriteLine("RevitXunitExecutor: Debugger launched successfully");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"RevitXunitExecutor: Failed to launch debugger: {ex.Message}");
+                }
+            }
+            else
+            {
+                Debug.WriteLine("RevitXunitExecutor: Debugger is already attached - test debugging enabled");
+            }
+        }
 
         RevitModelService.CancellationToken = cancellationToken;
         var methods = command.TestMethods;
@@ -122,15 +152,9 @@ public static class RevitXunitExecutor
 }
 
 // Clean xUnit integration without reflection
-internal class StreamingXmlTestExecutionVisitor : XmlTestExecutionVisitor
+internal class StreamingXmlTestExecutionVisitor(StreamWriter writer, XElement assemblyElement, Func<bool> cancelThunk) : XmlTestExecutionVisitor(assemblyElement, cancelThunk)
 {
-    private readonly StreamWriter _writer;
-
-    public StreamingXmlTestExecutionVisitor(StreamWriter writer, XElement assemblyElement, Func<bool> cancelThunk)
-        : base(assemblyElement, cancelThunk)
-    {
-        _writer = writer;
-    }
+    private readonly StreamWriter _writer = writer;
 
     private void Send(PipeTestResultMessage msg)
     {
@@ -157,8 +181,8 @@ internal class StreamingXmlTestExecutionVisitor : XmlTestExecutionVisitor
             Name = testFailed.Test.DisplayName,
             Outcome = "Failed",
             Duration = (double)testFailed.ExecutionTime,
-            ErrorMessage = string.Join(Environment.NewLine, testFailed.Messages ?? Array.Empty<string>()),
-            ErrorStackTrace = string.Join(Environment.NewLine, testFailed.StackTraces ?? Array.Empty<string>())
+            ErrorMessage = string.Join(Environment.NewLine, testFailed.Messages ?? []),
+            ErrorStackTrace = string.Join(Environment.NewLine, testFailed.StackTraces ?? [])
         });
         return base.Visit(testFailed);
     }

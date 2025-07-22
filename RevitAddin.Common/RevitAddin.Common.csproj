@@ -8,5 +8,6 @@
   
   <ItemGroup>
     <ProjectReference Include="..\RevitTestFramework.Common\RevitTestFramework.Common.csproj" />
+    <ProjectReference Include="..\RevitTestFramework.Contracts\RevitTestFramework.Contracts.csproj" />
   </ItemGroup>
 </Project>

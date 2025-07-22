@@ -1,24 +1,17 @@
 using System.IO.Pipes;
 using System.Text.Json;
-using Autodesk.Revit.UI;
 using RevitTestFramework.Common;
+using RevitTestFramework.Contracts;
 
 namespace RevitAddin.Common;
 
-public class PipeServer : IDisposable
+public class PipeServer(string pipeName, RevitTask revitTask, Func<string, ITestAssemblyLoadContext> createLoadContext) : IDisposable
 {
-    private readonly string _pipeName;
-    private readonly RevitTask _revitTask;
-    private readonly Func<string, ITestAssemblyLoadContext> _createLoadContext;
+    private readonly string _pipeName = pipeName;
+    private readonly RevitTask _revitTask = revitTask;
+    private readonly Func<string, ITestAssemblyLoadContext> _createLoadContext = createLoadContext ?? throw new ArgumentNullException(nameof(createLoadContext));
     private readonly CancellationTokenSource _cts = new();
     private Task? _listenerTask;
-
-    public PipeServer(string pipeName, RevitTask revitTask, Func<string, ITestAssemblyLoadContext> createLoadContext)
-    {
-        _pipeName = pipeName;
-        _revitTask = revitTask;
-        _createLoadContext = createLoadContext ?? throw new ArgumentNullException(nameof(createLoadContext));
-    }
 
     public void Start()
     {
@@ -60,7 +53,7 @@ public class PipeServer : IDisposable
     /// </summary>
     private async Task ProcessCommandAsync(PipeCommand command, NamedPipeServerStream server)
     {
-        if (command.Command == "RunXunitTests" || command.Command == "RunNUnitTests")
+        if (command.Command == "RunTests")
         {
 
             // Create a temporary directory for this test run to avoid file locking issues
@@ -88,7 +81,28 @@ public class PipeServer : IDisposable
 
     public void Dispose()
     {
-        try { _listenerTask?.Wait(); } catch { }
+        try
+        {
+            // Cancel the token source first to signal the ListenAsync loop to exit
+            _cts.Cancel();
+            
+            // Wait for the listener task to complete with a reasonable timeout
+            if (_listenerTask != null)
+            {
+                if (!_listenerTask.Wait(TimeSpan.FromSeconds(5)))
+                {
+                    System.Diagnostics.Debug.WriteLine("PipeServer: Listener task did not complete within timeout");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"PipeServer: Error during disposal: {ex.Message}");
+        }
+        finally
+        {
+            _cts.Dispose();
+        }
     }
 
     private static void CleanupTempDirectory(string tempTestDir)
