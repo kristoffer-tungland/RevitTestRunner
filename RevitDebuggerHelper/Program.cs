@@ -427,12 +427,6 @@ namespace RevitDebuggerHelper
                 }
                 return 3;
             }
-            catch (Microsoft.CSharp.RuntimeBinder.RuntimeBinderException rbEx)
-            {
-                Console.Error.WriteLine($"Dynamic binding error: {rbEx.Message}");
-                Console.Error.WriteLine("This can happen if the DTE object doesn't have the expected properties or methods.");
-                return 3;
-            }
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"Error attaching to process {processId}: {ex.Message}");

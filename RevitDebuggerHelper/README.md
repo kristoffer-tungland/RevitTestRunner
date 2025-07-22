@@ -6,41 +6,6 @@ This is a .NET Framework 4.8 console application that enables Visual Studio debu
 
 The main test framework runs on .NET 8, but Visual Studio's DTE (Development Tools Environment) COM API requires .NET Framework for proper interop. This helper bridges that gap for both attachment and detachment operations.
 
-## ?? **IMPORTANT: Project Setup**
-
-The project file contains COM references that may cause build issues. If you encounter build errors related to EnvDTE, follow these steps:
-
-### Option 1: Remove COM References (Recommended)
-1. **Close Visual Studio** if the project is open
-2. **Edit `RevitDebuggerHelper.csproj`** and remove the entire `<ItemGroup>` containing the `<COMReference>` entries:
-   ```xml
-   <!-- Remove this entire section -->
-   <ItemGroup>
-     <COMReference Include="EnvDTE">
-       <!-- ... -->
-     </COMReference>
-     <COMReference Include="EnvDTE80">
-       <!-- ... -->
-     </COMReference>
-   </ItemGroup>
-   ```
-3. **Save the file** and reopen in Visual Studio
-4. **Build the project**
-
-### Option 2: Manual Build with CSC
-If you continue to have issues, you can build manually:
-```cmd
-csc /target:exe /out:bin\Release\RevitDebuggerHelper.exe Program.cs
-```
-
-## ? **Why This Works**
-
-The updated `Program.cs` uses **dynamic COM interop** instead of compile-time EnvDTE references. This approach:
-- ? Avoids COM reference resolution issues
-- ? Works with any Visual Studio version
-- ? Doesn't require specific EnvDTE assemblies
-- ? Uses dynamic property access for all COM interactions
-
 ## Usage
 
 ### Command Line Options
@@ -72,7 +37,7 @@ The `PipeClientHelper` automatically uses this helper when debugger attachment/d
 
 - .NET Framework 4.8
 - Visual Studio 2017 or later (running)
-- No additional dependencies required
+- Microsoft.CSharp package for dynamic COM interop
 
 ## Exit Codes
 
@@ -85,21 +50,19 @@ The `PipeClientHelper` automatically uses this helper when debugger attachment/d
 
 ## Building
 
-### Option 1: Visual Studio
-1. Remove COM references from project file (see setup above)
-2. Build normally in Visual Studio
+The project builds normally using standard .NET tooling:
 
-### Option 2: MSBuild
+### Visual Studio
+Build the project normally in Visual Studio (Build ? Build Solution)
+
+### .NET CLI
 ```cmd
-msbuild RevitDebuggerHelper.csproj /p:Configuration=Release
+dotnet build RevitDebuggerHelper.csproj
 ```
 
-### Option 3: Batch Script
-Run `build.bat` which will automatically find MSBuild and build the project.
-
-### Option 4: Manual CSC
+### MSBuild
 ```cmd
-csc /target:exe /out:bin\Release\RevitDebuggerHelper.exe Program.cs
+msbuild RevitDebuggerHelper.csproj /p:Configuration=Release
 ```
 
 ## Integration
@@ -125,9 +88,10 @@ The helper is searched for in these locations:
 ## Troubleshooting
 
 ### Build Issues
-1. **COM reference errors**: Remove COM references from project file (see setup above)
-2. **Missing assemblies**: Use dynamic COM approach (already implemented)
-3. **Platform mismatch**: Ensure AnyCPU target platform
+The project should build without issues using standard .NET tooling. If you encounter problems:
+1. **Missing Microsoft.CSharp**: The project includes the necessary package reference
+2. **Platform mismatch**: Ensure the project targets .NET Framework 4.8
+3. **Visual Studio version**: Works with Visual Studio 2017 or later
 
 ### Runtime Issues
 1. **Visual Studio not found**: Ensure Visual Studio is running
@@ -135,27 +99,22 @@ The helper is searched for in these locations:
 3. **Permission denied**: Run as administrator if needed
 4. **COM errors**: Check that Visual Studio can see the process (Debug > Attach to Process)
 
-### Testing the Helper
-```cmd
-# Test attachment to a Revit process
-RevitDebuggerHelper.exe --find-revit
-
-# Test detachment from a specific process
-RevitDebuggerHelper.exe --detach 1234
-
-# Test detachment from all Revit processes
-RevitDebuggerHelper.exe --detach-all
-```
-
 ## Technical Details
 
 The helper uses **dynamic COM interop** with these key features:
 
-### Attachment Features
+### Dynamic COM Interop Approach
 - Uses `Marshal.GetActiveObject()` to find Visual Studio DTE
 - Tries multiple Visual Studio versions (2022, 2019, 2017)
 - Uses dynamic property access to navigate DTE object model
 - Handles all COM interactions dynamically at runtime
+- No compile-time dependencies on Visual Studio assemblies
+
+### Attachment Features
+- Searches through `debugger.LocalProcesses` to find target process
+- Calls `process.Attach()` method on target process
+- Validates process exists before attempting attachment
+- Provides detailed error messages for troubleshooting
 
 ### Detachment Features
 - Accesses `debugger.DebuggedProcesses` to find attached processes
@@ -164,10 +123,10 @@ The helper uses **dynamic COM interop** with these key features:
 - Gracefully handles cases where process is not being debugged
 
 ### Error Handling
-- Comprehensive COM exception handling
+- Comprehensive COM exception handling with specific HRESULT guidance
 - Specific error codes for different failure scenarios
 - Detailed logging for troubleshooting
-- No compile-time dependencies on Visual Studio assemblies
+- Fallback mechanisms for finding Visual Studio instances
 
 ## Automatic Usage in Test Framework
 
