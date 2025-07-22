@@ -132,6 +132,107 @@ public static class PipeClientHelper
     private const int SW_HIDE = 0;
 
     /// <summary>
+    /// Tracks launched Revit processes to ensure they are cleaned up after test execution
+    /// </summary>
+    private static readonly HashSet<int> _launchedRevitProcessIds = new();
+    private static readonly object _processTrackingLock = new();
+
+    static PipeClientHelper()
+    {
+        // Register for process exit to clean up any remaining Revit processes
+        AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
+        AppDomain.CurrentDomain.DomainUnload += OnDomainUnload;
+    }
+
+    /// <summary>
+    /// Cleanup handler for when the current process is exiting
+    /// </summary>
+    private static void OnProcessExit(object? sender, EventArgs e)
+    {
+        CleanupLaunchedRevitProcesses(null);
+    }
+
+    /// <summary>
+    /// Cleanup handler for when the current AppDomain is unloading
+    /// </summary>
+    private static void OnDomainUnload(object? sender, EventArgs e)
+    {
+        CleanupLaunchedRevitProcesses(null);
+    }
+
+    /// <summary>
+    /// Tracks a launched Revit process for cleanup
+    /// </summary>
+    /// <param name="processId">The process ID to track</param>
+    /// <param name="logger">Optional logger for informational messages</param>
+    private static void TrackLaunchedRevitProcess(int processId, ILogger? logger)
+    {
+        lock (_processTrackingLock)
+        {
+            _launchedRevitProcessIds.Add(processId);
+            logger?.LogInformation($"PipeClientHelper: Tracking launched Revit process {processId} for cleanup");
+        }
+    }
+
+    /// <summary>
+    /// Stops tracking a Revit process (called when the process is manually killed or exits)
+    /// </summary>
+    /// <param name="processId">The process ID to stop tracking</param>
+    private static void UntrackRevitProcess(int processId)
+    {
+        lock (_processTrackingLock)
+        {
+            _launchedRevitProcessIds.Remove(processId);
+        }
+    }
+
+    /// <summary>
+    /// Cleans up all launched Revit processes
+    /// </summary>
+    /// <param name="logger">Optional logger for informational messages</param>
+    public static void CleanupLaunchedRevitProcesses(ILogger? logger)
+    {
+        List<int> processesToKill;
+        lock (_processTrackingLock)
+        {
+            processesToKill = new List<int>(_launchedRevitProcessIds);
+            _launchedRevitProcessIds.Clear();
+        }
+
+        if (processesToKill.Count > 0)
+        {
+            logger?.LogInformation($"PipeClientHelper: Cleaning up {processesToKill.Count} launched Revit process(es)");
+            
+            foreach (var processId in processesToKill)
+            {
+                try
+                {
+                    var process = Process.GetProcessById(processId);
+                    if (!process.HasExited)
+                    {
+                        logger?.LogInformation($"PipeClientHelper: Killing launched Revit process {processId}");
+                        process.Kill();
+                        process.WaitForExit(5000); // Wait up to 5 seconds for graceful exit
+                    }
+                    else
+                    {
+                        logger?.LogInformation($"PipeClientHelper: Launched Revit process {processId} already exited");
+                    }
+                }
+                catch (ArgumentException)
+                {
+                    // Process not found, already cleaned up
+                    logger?.LogInformation($"PipeClientHelper: Launched Revit process {processId} not found (already cleaned up)");
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogError($"PipeClientHelper: Failed to kill launched Revit process {processId}: {ex.Message}");
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Result type for connection that includes both the client stream and the connected process ID
     /// </summary>
     public record RevitConnectionResult(NamedPipeClientStream Client, int ProcessId);
@@ -191,6 +292,9 @@ public static class PipeClientHelper
 
         logger?.LogInformation($"PipeClientHelper: Revit process started with ID: {revitProc.Id}");
 
+        // Track this process for cleanup
+        TrackLaunchedRevitProcess(revitProc.Id, logger);
+
         // Wait for main window to initialize
         logger?.LogInformation("PipeClientHelper: Waiting for Revit main window to initialize...");
         int waitTimeMs = 0;
@@ -201,6 +305,7 @@ public static class PipeClientHelper
         {
             if (revitProc.HasExited)
             {
+                UntrackRevitProcess(revitProc.Id);
                 throw new InvalidOperationException("Revit process exited unexpectedly during startup");
             }
 
@@ -365,6 +470,7 @@ public static class PipeClientHelper
             if (!WaitForRevitPipeAvailability(newRevitProcess, logger))
             {
                 newRevitProcess.Kill();
+                UntrackRevitProcess(newRevitProcess.Id);
                 throw new InvalidOperationException("Revit test infrastructure failed to initialize within the timeout period");
             }
 
@@ -525,6 +631,10 @@ public static class PipeClientHelper
         }
         finally
         {
+            // Clean up launched Revit processes after test execution is complete
+            logger?.LogInformation("PipeClientHelper: Test execution finished - cleaning up launched Revit processes");
+            CleanupLaunchedRevitProcesses(logger);
+
             // Detach debugger after test execution is completed
             // This is now asynchronous and won't block the test host from exiting
             // Can be disabled via environment variable if it causes issues
