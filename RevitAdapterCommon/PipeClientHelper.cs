@@ -28,16 +28,16 @@ public class FrameworkHandleLogger : ILogger
     public FrameworkHandleLogger(object frameworkHandle)
     {
         _frameworkHandle = frameworkHandle ?? throw new ArgumentNullException(nameof(frameworkHandle));
-        
+
         try
         {
             // Look for TestMessageLevel in multiple possible locations
             Type? testMessageLevelType = null;
-            
+
             // First try the framework handle's assembly
             var handleAssembly = frameworkHandle.GetType().Assembly;
             testMessageLevelType = handleAssembly.GetType("Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging.TestMessageLevel");
-            
+
             // If not found, try loaded assemblies
             if (testMessageLevelType == null)
             {
@@ -47,7 +47,7 @@ public class FrameworkHandleLogger : ILogger
                     if (testMessageLevelType != null) break;
                 }
             }
-            
+
             // If still not found, try a more generic approach
             if (testMessageLevelType == null)
             {
@@ -67,12 +67,12 @@ public class FrameworkHandleLogger : ILogger
                     }
                 }
             }
-            
+
             if (testMessageLevelType == null)
             {
                 throw new InvalidOperationException("Could not find TestMessageLevel type in any loaded assembly");
             }
-            
+
             _informationalLevel = Enum.Parse(testMessageLevelType, "Informational");
             _errorLevel = Enum.Parse(testMessageLevelType, "Error");
         }
@@ -167,7 +167,7 @@ public static class PipeClientHelper
     private static Process LaunchHiddenRevit(string revitVersion, ILogger? logger, string? customExecutablePath)
     {
         var revitExePath = customExecutablePath ?? GetRevitExecutablePath(revitVersion);
-        
+
         if (!File.Exists(revitExePath))
         {
             throw new FileNotFoundException($"Revit executable not found at: {revitExePath}");
@@ -233,7 +233,7 @@ public static class PipeClientHelper
     private static bool WaitForRevitPipeAvailability(Process revitProcess, ILogger? logger, int maxWaitTimeMs = 60000)
     {
         logger?.LogInformation("PipeClientHelper: Waiting for Revit test infrastructure to initialize...");
-        
+
         int waitTimeMs = 0;
         const int pollIntervalMs = 1000;
 
@@ -257,7 +257,7 @@ public static class PipeClientHelper
 
                 using var testClient = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
                 testClient.Connect(100); // Quick connection test
-                
+
                 logger?.LogInformation("PipeClientHelper: Revit test infrastructure is ready!");
                 return true;
             }
@@ -268,7 +268,7 @@ public static class PipeClientHelper
 
             Thread.Sleep(pollIntervalMs);
             waitTimeMs += pollIntervalMs;
-            
+
             if (waitTimeMs % 5000 == 0) // Log progress every 5 seconds
             {
                 logger?.LogInformation($"PipeClientHelper: Still waiting for Revit test infrastructure... ({waitTimeMs / 1000}s elapsed)");
@@ -356,11 +356,11 @@ public static class PipeClientHelper
 
         // No existing process found or connection failed - launch a new hidden Revit instance
         logger?.LogInformation($"PipeClientHelper: No suitable Revit process found. Launching new hidden Revit {revitVersion} instance...");
-        
+
         try
         {
             var newRevitProcess = LaunchHiddenRevit(revitVersion, logger);
-            
+
             // Wait for the test infrastructure to be ready
             if (!WaitForRevitPipeAvailability(newRevitProcess, logger))
             {
@@ -378,7 +378,7 @@ public static class PipeClientHelper
 
             var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
             client.Connect(5000); // Give it more time for the new process
-            
+
             logger?.LogInformation($"PipeClientHelper: Successfully connected to newly launched Revit process {newRevitProcess.Id}");
             return new RevitConnectionResult(client, newRevitProcess.Id);
         }
@@ -386,7 +386,7 @@ public static class PipeClientHelper
         {
             logger?.LogError($"PipeClientHelper: Failed to launch and connect to new Revit instance: {ex.Message}");
             exceptions.Add(ex);
-            
+
             // If we reach here, everything failed
             var aggregateException = new AggregateException("Failed to connect to any Revit process and failed to launch new instance", exceptions);
             throw new InvalidOperationException($"No Revit process with test pipe found for version {revitVersion} and failed to launch new instance. Tried {exceptions.Count} connections.", aggregateException);
@@ -457,19 +457,19 @@ public static class PipeClientHelper
         using var cancelServer = new NamedPipeServerStream(command.CancelPipe, PipeDirection.Out, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
         var connectionResult = ConnectToRevitWithProcessId(revitVersion, logger);
         using var client = connectionResult.Client;
-        
+
         // Track if we attached the debugger so we can detach it later
         bool debuggerAttached = false;
-        
+
         // If debug mode is enabled and debugger is attached, attempt to attach debugger to the specific Revit process
         if (command.Debug && Debugger.IsAttached)
         {
             TryAttachDebuggerToRevit(connectionResult.ProcessId, logger);
             debuggerAttached = true;
         }
-        
+
         var json = JsonSerializer.Serialize(command);
-        
+
         // Create StreamWriter in a try-catch to handle disposal issues
         StreamWriter? sw = null;
         try
@@ -554,7 +554,7 @@ public static class PipeClientHelper
         try
         {
             logger?.LogInformation($"PipeClientHelper: Attempting to attach debugger to specific Revit process {processId}...");
-            
+
             var revitProcess = Process.GetProcessById(processId);
             if (revitProcess == null || revitProcess.HasExited)
             {
@@ -564,20 +564,9 @@ public static class PipeClientHelper
 
             logger?.LogInformation($"PipeClientHelper: Found Revit process {processId} ({revitProcess.ProcessName})");
 
-            // Use reflection to access Visual Studio DTE (if available) for debugger attachment
-            var dte = GetVisualStudioDTE();
-            if (dte != null)
-            {
-                logger?.LogInformation($"PipeClientHelper: Visual Studio DTE available, attempting automatic debugger attachment to process {processId}");
-                AttachDebuggerViaDTE(dte, revitProcess, logger);
-            }
-            else
-            {
-                logger?.LogInformation("PipeClientHelper: Visual Studio DTE not available via COM - trying helper application");
-                
-                // Try using the .NET Framework helper application
-                TryAttachDebuggerUsingHelper(processId, logger);
-            }
+            logger?.LogInformation("PipeClientHelper: Attempting to attach debugger to Revit");
+            // Try using the .NET Framework helper application
+            TryAttachDebuggerUsingHelper(processId, logger);
         }
         catch (ArgumentException)
         {
@@ -586,24 +575,6 @@ public static class PipeClientHelper
         catch (Exception ex)
         {
             logger?.LogError($"PipeClientHelper: Failed to attach debugger to Revit process {processId}: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Gets the Visual Studio DTE object if available
-    /// </summary>
-    /// <returns>DTE object or null if not available</returns>
-    private static object? GetVisualStudioDTE()
-    {
-        try
-        {
-            // COM interop is not directly available in .NET Core/5+
-            // We'll use a .NET Framework helper application for DTE access
-            return null; // Always return null to trigger the helper app approach
-        }
-        catch
-        {
-            return null;
         }
     }
 
@@ -671,7 +642,7 @@ public static class PipeClientHelper
         }
 
         bool completed = process.WaitForExit(timeoutMs);
-        
+
         if (!completed)
         {
             try
@@ -731,7 +702,7 @@ public static class PipeClientHelper
                 {
                     logger?.LogInformation($"PipeClientHelper: Helper output: {result.Output.Trim()}");
                 }
-                
+
                 // Fallback to manual attachment message
                 logger?.LogInformation($"PipeClientHelper: To debug Revit tests, manually attach debugger to Revit.exe process ID {processId}");
             }
@@ -793,7 +764,7 @@ public static class PipeClientHelper
                             {
                                 logger?.LogInformation($"PipeClientHelper: Detach helper output: {result.Output.Trim()}");
                             }
-							
+
                             // Exit codes for detachment (not necessarily errors)
                             switch (result.ExitCode)
                             {
@@ -819,72 +790,6 @@ public static class PipeClientHelper
         catch (Exception ex)
         {
             logger?.LogInformation($"PipeClientHelper: Error starting debugger helper for detachment: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Attempts to attach debugger using Visual Studio DTE
-    /// </summary>
-    /// <param name="dte">Visual Studio DTE object</param>
-    /// <param name="targetProcess">The process to attach to</param>
-    /// <param name="logger">Optional logger</param>
-    private static void AttachDebuggerViaDTE(object dte, Process targetProcess, ILogger? logger)
-    {
-        try
-        {
-            // Use reflection to avoid direct DTE dependency
-            var debuggerProperty = dte.GetType().GetProperty("Debugger");
-            var debugger = debuggerProperty?.GetValue(dte);
-            
-            if (debugger == null)
-            {
-                logger?.LogInformation("PipeClientHelper: Could not access Visual Studio Debugger");
-                return;
-            }
-
-            var localProcessesProperty = debugger.GetType().GetProperty("LocalProcesses");
-            var localProcesses = localProcessesProperty?.GetValue(debugger);
-            
-            if (localProcesses == null)
-            {
-                logger?.LogInformation("PipeClientHelper: Could not access LocalProcesses");
-                return;
-            }
-
-            // Find the target process in the local processes collection
-            var processesType = localProcesses.GetType();
-            var getEnumeratorMethod = processesType.GetMethod("GetEnumerator");
-            var enumerator = getEnumeratorMethod?.Invoke(localProcesses, null);
-            
-            if (enumerator == null) return;
-
-            var enumeratorType = enumerator.GetType();
-            var moveNextMethod = enumeratorType.GetMethod("MoveNext");
-            var currentProperty = enumeratorType.GetProperty("Current");
-
-            while ((bool)(moveNextMethod?.Invoke(enumerator, null) ?? false))
-            {
-                var currentProcess = currentProperty?.GetValue(enumerator);
-                if (currentProcess == null) continue;
-
-                var processIdProperty = currentProcess.GetType().GetProperty("ProcessID");
-                var processId = (int)(processIdProperty?.GetValue(currentProcess) ?? 0);
-
-                if (processId == targetProcess.Id)
-                {
-                    logger?.LogInformation($"PipeClientHelper: Found target Revit process {processId} in debugger processes");
-                    
-                    var attachMethod = currentProcess.GetType().GetMethod("Attach");
-                    attachMethod?.Invoke(currentProcess, null);
-                    
-                    logger?.LogInformation($"PipeClientHelper: Successfully attached debugger to Revit process {processId}");
-                    break;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            logger?.LogError($"PipeClientHelper: Error during DTE debugger attachment: {ex.Message}");
         }
     }
 }
