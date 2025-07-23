@@ -92,6 +92,13 @@ namespace RevitXunitAdapter
 
                     try
                     {
+                        // First try to deserialize as a log message
+                        if (TryHandleLogMessage(line, frameworkHandle))
+                        {
+                            return; // Successfully handled as log message
+                        }
+
+                        // If not a log message, try to handle as test result
                         var msg = JsonSerializer.Deserialize<PipeTestResultMessage>(line);
                         if (msg == null)
                         {
@@ -122,6 +129,88 @@ namespace RevitXunitAdapter
             {
                 frameworkHandle.SendMessage(TestMessageLevel.Error, $"RevitXunitExecutor: Error in SendRunCommandStreaming: {ex}");
             }
+        }
+
+        /// <summary>
+        /// Attempts to handle a line as a log message and forward it to the framework handle
+        /// </summary>
+        /// <param name="line">The line received from the pipe</param>
+        /// <param name="frameworkHandle">The framework handle to forward messages to</param>
+        /// <returns>True if the line was successfully handled as a log message, false otherwise</returns>
+        private static bool TryHandleLogMessage(string line, IFrameworkHandle frameworkHandle)
+        {
+            try
+            {
+                var logMessage = JsonSerializer.Deserialize<PipeLogMessage>(line);
+                if (logMessage == null || logMessage.Type != "LOG")
+                {
+                    return false; // Not a log message
+                }
+
+                // Skip DEBUG level messages - these should only be in file logs
+                if (logMessage.Level.Equals("DEBUG", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true; // Successfully handled (by ignoring)
+                }
+
+                // Convert log level to TestMessageLevel
+                var testMessageLevel = ConvertLogLevelToTestMessageLevel(logMessage.Level);
+                
+                // Format the log message with timestamp and source
+                var formattedMessage = FormatLogMessage(logMessage);
+                
+                // Forward to framework handle
+                frameworkHandle.SendMessage(testMessageLevel, formattedMessage);
+                
+                return true; // Successfully handled as log message
+            }
+            catch (JsonException)
+            {
+                // Not a valid log message JSON
+                return false;
+            }
+            catch (Exception ex)
+            {
+                frameworkHandle.SendMessage(TestMessageLevel.Warning, $"RevitXunitExecutor: Error processing log message: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Converts a log level string to TestMessageLevel
+        /// </summary>
+        /// <param name="logLevel">The log level string (INFO, WARN, ERROR, FATAL)</param>
+        /// <returns>The corresponding TestMessageLevel</returns>
+        private static TestMessageLevel ConvertLogLevelToTestMessageLevel(string logLevel)
+        {
+            return logLevel.ToUpperInvariant() switch
+            {
+                "INFO" => TestMessageLevel.Informational,
+                "WARN" => TestMessageLevel.Warning,
+                "ERROR" => TestMessageLevel.Error,
+                "FATAL" => TestMessageLevel.Error,
+                _ => TestMessageLevel.Informational
+            };
+        }
+
+        /// <summary>
+        /// Formats a log message for display in the test framework
+        /// </summary>
+        /// <param name="logMessage">The log message to format</param>
+        /// <returns>The formatted message string</returns>
+        private static string FormatLogMessage(PipeLogMessage logMessage)
+        {
+            var prefix = "Revit";
+            if (!string.IsNullOrEmpty(logMessage.Source))
+            {
+                prefix = $"Revit.{logMessage.Source}";
+            }
+
+            var timestamp = DateTime.TryParse(logMessage.Timestamp, out var parsedTime) 
+                ? parsedTime.ToString("HH:mm:ss.fff") 
+                : logMessage.Timestamp;
+
+            return $"{prefix} [{logMessage.Level}] {timestamp}: {logMessage.Message}";
         }
 
         public void Cancel()

@@ -909,57 +909,6 @@ public static class PipeClientHelper
     }
 
     /// <summary>
-    /// Sends a command using the new connection method with Revit version
-    /// </summary>
-    /// <param name="command">The command to send</param>
-    /// <param name="revitVersion">The Revit version to connect to</param>
-    /// <returns>The response from the server</returns>
-    public static string SendCommand(object command, string revitVersion)
-    {
-        return SendCommand(command, revitVersion, null);
-    }
-
-    /// <summary>
-    /// Sends a command using the new connection method with Revit version
-    /// </summary>
-    /// <param name="command">The command to send</param>
-    /// <param name="revitVersion">The Revit version to connect to</param>
-    /// <param name="logger">Optional logger for sending informational messages to test console</param>
-    /// <returns>The response from the server</returns>
-    public static string SendCommand(object command, string revitVersion, ILogger? logger)
-    {
-        var connectionResult = ConnectToRevitWithProcessId(revitVersion, logger);
-        using var client = connectionResult.Client;
-        var json = JsonSerializer.Serialize(command);
-        using var sw = new StreamWriter(client, leaveOpen: true);
-        sw.WriteLine(json);
-        sw.Flush();
-        using var sr = new StreamReader(client);
-        var result = sr.ReadLine() ?? string.Empty;
-        return result;
-    }
-
-    /// <summary>
-    /// Sends a command using the new connection method with Revit version
-    /// </summary>
-    /// <param name="command">The command to send</param>
-    /// <param name="revitVersion">The Revit version to connect to</param>
-    /// <param name="frameworkHandle">Framework handle for sending informational messages to test console</param>
-    /// <returns>The response from the server</returns>
-    public static string SendCommand(object command, string revitVersion, object frameworkHandle)
-    {
-        try
-        {
-            return SendCommand(command, revitVersion, frameworkHandle.ToLogger());
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"PipeClientHelper: Failed to create logger from framework handle: {ex.Message}");
-            return SendCommand(command, revitVersion, null);
-        }
-    }
-
-    /// <summary>
     /// Sends a streaming command using the new connection method with Revit version
     /// </summary>
     /// <param name="command">The pipe command to send</param>
@@ -1072,16 +1021,6 @@ public static class PipeClientHelper
                 }
             }
         }
-    }
-
-    /// <summary>
-    /// Attempts to attach the current debugger to a specific Revit process
-    /// </summary>
-    /// <param name="processId">The specific Revit process ID to attach to</param>
-    /// <param name="logger">Optional logger for sending informational messages</param>
-    private static void TryAttachDebuggerToRevit(int processId, ILogger? logger)
-    {
-        TryAttachDebuggerToRevit(processId, logger, null);
     }
 
     /// <summary>

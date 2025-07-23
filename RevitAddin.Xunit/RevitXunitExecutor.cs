@@ -12,6 +12,7 @@ namespace RevitAddin.Xunit;
 
 public static class RevitXunitExecutor
 {
+    private static ILogger _logger = FileLogger.ForContext(typeof(RevitXunitExecutor));
 
     /// <summary>
     /// Sets up the required Revit API infrastructure (ExternalEvents, etc.).
@@ -19,7 +20,17 @@ public static class RevitXunitExecutor
     /// </summary>
     public static void SetupInfrastructure(UIApplication uiApp)
     {
-        RevitTestInfrastructure.Setup(uiApp);
+        try
+        {
+            _logger.LogInformation("Setting up Revit test infrastructure");
+            RevitTestInfrastructure.Setup(uiApp);
+            _logger.LogInformation("Revit test infrastructure setup completed");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to setup Revit test infrastructure");
+            throw;
+        }
     }
 
     /// <summary>
@@ -28,99 +39,146 @@ public static class RevitXunitExecutor
     /// </summary>
     public static void TeardownInfrastructure()
     {
-        RevitTestInfrastructure.Dispose();
+        try
+        {
+            _logger.LogInformation("Tearing down Revit test infrastructure");
+            RevitTestInfrastructure.Dispose();
+            _logger.LogInformation("Revit test infrastructure teardown completed");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to teardown Revit test infrastructure");
+            throw;
+        }
     }
 
     public static async Task ExecuteTestsInRevitAsync(string commandJson, string testAssemblyPath, StreamWriter writer, CancellationToken cancellationToken)
     {
-        // Deserialize the command in the isolated context to avoid cross-ALC type issues
-        var command = JsonSerializer.Deserialize<PipeCommand>(commandJson)
-            ?? throw new InvalidOperationException("Failed to deserialize PipeCommand");
-
-        // Handle debug mode if enabled
-        if (command.Debug)
+        // Upgrade to pipe-aware logger for this execution
+        var pipeAwareLogger = PipeAwareLogger.ForContext(typeof(RevitXunitExecutor), writer);
+        
+        try
         {
-            Debug.WriteLine("RevitXunitExecutor: Debug mode enabled - debugger can now be attached to Revit process");
+            pipeAwareLogger.LogInformation($"Starting test execution for assembly: {testAssemblyPath}");
             
-            // If debugger is not already attached, provide helpful information
-            if (!Debugger.IsAttached)
+            // Deserialize the command in the isolated context to avoid cross-ALC type issues
+            var command = JsonSerializer.Deserialize<PipeCommand>(commandJson)
+                ?? throw new InvalidOperationException("Failed to deserialize PipeCommand");
+
+            var methodsStr = command.TestMethods != null ? string.Join(", ", command.TestMethods) : "All";
+            pipeAwareLogger.LogDebug($"Test execution command - Debug: {command.Debug}, Methods: {methodsStr}");
+
+            // Handle debug mode if enabled
+            if (command.Debug)
             {
-                var processId = Process.GetCurrentProcess().Id;
-                Debug.WriteLine($"RevitXunitExecutor: To debug tests, attach debugger to Revit.exe process ID: {processId}");
+                pipeAwareLogger.LogInformation("Debug mode enabled - debugger can now be attached to Revit process");
+                Debug.WriteLine("RevitXunitExecutor: Debug mode enabled - debugger can now be attached to Revit process");
                 
-                // Optional: Launch debugger if possible (requires Just-In-Time debugging enabled)
+                // If debugger is not already attached, provide helpful information
+                if (!Debugger.IsAttached)
+                {
+                    var processId = Process.GetCurrentProcess().Id;
+                    pipeAwareLogger.LogInformation($"To debug tests, attach debugger to Revit.exe process ID: {processId}");
+                    Debug.WriteLine($"RevitXunitExecutor: To debug tests, attach debugger to Revit.exe process ID: {processId}");
+                    
+                    // Optional: Launch debugger if possible (requires Just-In-Time debugging enabled)
+                    try
+                    {
+                        if (Debugger.Launch())
+                        {
+                            pipeAwareLogger.LogInformation("Debugger launched successfully");
+                            Debug.WriteLine("RevitXunitExecutor: Debugger launched successfully");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        pipeAwareLogger.LogWarning($"Failed to launch debugger: {ex.Message}");
+                        Debug.WriteLine($"RevitXunitExecutor: Failed to launch debugger: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    pipeAwareLogger.LogInformation("Debugger is already attached - test debugging enabled");
+                    Debug.WriteLine("RevitXunitExecutor: Debugger is already attached - test debugging enabled");
+                }
+            }
+
+            RevitTestInfrastructure.CancellationToken = cancellationToken;
+            var methods = command.TestMethods;
+
+            // Execute tests on a background thread to avoid blocking Revit UI
+            // IMPORTANT: Use await instead of .Wait() to prevent UI thread deadlock
+            await Task.Run(async () =>
+            {
                 try
                 {
-                    if (Debugger.Launch())
+                    pipeAwareLogger.LogDebug("Starting xUnit test execution in background thread");
+                    
+                    // Now we can use xUnit directly since we're running in the isolated ALC!
+                    var assemblyElement = new XElement("assembly");
+                    using var controller = new XunitFrontController(AppDomainSupport.Denied, testAssemblyPath, shadowCopy: false);
+                    var discoveryOptions = TestFrameworkOptions.ForDiscovery();
+                    
+                    var configuration = new TestAssemblyConfiguration
                     {
-                        Debug.WriteLine("RevitXunitExecutor: Debugger launched successfully");
+                        ParallelizeAssembly = false,
+                        ParallelizeTestCollections = false,
+                    };
+
+                    var executionOptions = TestFrameworkOptions.ForExecution(configuration);
+
+                    List<ITestCase> testCases;
+                    var discoverySink = new TestDiscoverySink();
+                    pipeAwareLogger.LogDebug("Discovering test cases in assembly");
+                    controller.Find(false, discoverySink, discoveryOptions);
+                    discoverySink.Finished.WaitOne();
+                    testCases = discoverySink.TestCases.ToList();
+                    pipeAwareLogger.LogInformation($"Discovered {testCases.Count} test cases");
+
+                    // Filter test cases if specific methods are requested
+                    if (methods != null && methods.Length > 0)
+                    {
+                        var originalCount = testCases.Count;
+                        testCases = testCases.Where(tc => methods.Contains(tc.TestMethod.TestClass.Class.Name + "." + tc.TestMethod.Method.Name)).ToList();
+                        pipeAwareLogger.LogInformation($"Filtered to {testCases.Count} test cases (from {originalCount}) based on method filter");
                     }
+
+                    pipeAwareLogger.LogInformation($"Starting execution of {testCases.Count} test cases");
+                    using var visitor = new StreamingXmlTestExecutionVisitor(writer, assemblyElement, () => cancellationToken.IsCancellationRequested, pipeAwareLogger);
+                    controller.RunTests(testCases, visitor, executionOptions);
+                    visitor.Finished.WaitOne();
+
+                    string resultXml = new XDocument(assemblyElement).ToString();
+                    var fileName = $"RevitXunitResults_{Guid.NewGuid():N}.xml";
+                    var resultsPath = Path.Combine(Path.GetTempPath(), fileName);
+                    File.WriteAllText(resultsPath, resultXml);
+                    
+                    pipeAwareLogger.LogInformation($"Test execution completed. Results saved to: {resultsPath}");
+                    
+                    writer.WriteLine("END");
+                    writer.Flush();
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"RevitXunitExecutor: Failed to launch debugger: {ex.Message}");
+                    pipeAwareLogger.LogError(ex, "Test execution failed in background thread");
+                    HandleTestExecutionException(ex, command.TestMethods, writer, pipeAwareLogger);
                 }
-            }
-            else
-            {
-                Debug.WriteLine("RevitXunitExecutor: Debugger is already attached - test debugging enabled");
-            }
+            }, cancellationToken);
+            
+            pipeAwareLogger.LogInformation("Test execution async operation completed");
         }
-
-        RevitTestInfrastructure.CancellationToken = cancellationToken;
-        var methods = command.TestMethods;
-
-        // Execute tests on a background thread to avoid blocking Revit UI
-        // IMPORTANT: Use await instead of .Wait() to prevent UI thread deadlock
-        await Task.Run(async () =>
+        catch (Exception ex)
         {
-            try
-            {
-                // Now we can use xUnit directly since we're running in the isolated ALC!
-                var assemblyElement = new XElement("assembly");
-                using var controller = new XunitFrontController(AppDomainSupport.Denied, testAssemblyPath, shadowCopy: false);
-                var discoveryOptions = TestFrameworkOptions.ForDiscovery();
-                
-                var configuration = new TestAssemblyConfiguration
-                {
-                    ParallelizeAssembly = false,
-                    ParallelizeTestCollections = false,
-                };
-
-                var executionOptions = TestFrameworkOptions.ForExecution(configuration);
-
-                List<ITestCase> testCases;
-                var discoverySink = new TestDiscoverySink();
-                controller.Find(false, discoverySink, discoveryOptions);
-                discoverySink.Finished.WaitOne();
-                testCases = discoverySink.TestCases.ToList();
-
-                // Filter test cases if specific methods are requested
-                if (methods != null && methods.Length > 0)
-                {
-                    testCases = testCases.Where(tc => methods.Contains(tc.TestMethod.TestClass.Class.Name + "." + tc.TestMethod.Method.Name)).ToList();
-                }
-
-                using var visitor = new StreamingXmlTestExecutionVisitor(writer, assemblyElement, () => cancellationToken.IsCancellationRequested);
-                controller.RunTests(testCases, visitor, executionOptions);
-                visitor.Finished.WaitOne();
-
-                string resultXml = new XDocument(assemblyElement).ToString();
-                var fileName = $"RevitXunitResults_{Guid.NewGuid():N}.xml";
-                var resultsPath = Path.Combine(Path.GetTempPath(), fileName);
-                File.WriteAllText(resultsPath, resultXml);
-                writer.WriteLine("END");
-                writer.Flush();
-            }
-            catch (Exception ex)
-            {
-                HandleTestExecutionException(ex, command.TestMethods, writer);
-            }
-        }, cancellationToken);
+            pipeAwareLogger.LogError(ex, "ExecuteTestsInRevitAsync failed");
+            throw;
+        }
     }
 
-    private static void HandleTestExecutionException(Exception ex, string[]? methods, StreamWriter writer)
+    private static void HandleTestExecutionException(Exception ex, string[]? methods, StreamWriter writer, ILogger logger)
     {
+        var methodsStr = methods != null ? string.Join(", ", methods) : "None";
+        logger.LogError(ex, $"Handling test execution exception for methods: {methodsStr}");
+                
         try
         {
             // Create a failure result message for any tests that were supposed to run
@@ -139,11 +197,15 @@ public static class RevitXunitExecutor
             writer.WriteLine("END");
             writer.Flush();
 
+            logger.LogDebug("Failure message written to pipe stream");
+            
             // Log the exception for debugging
             System.Diagnostics.Debug.WriteLine($"RevitXunitExecutor: Test execution failed with exception: {ex}");
         }
         catch (Exception writeEx)
         {
+            logger.LogFatal(writeEx, $"Failed to write error message to pipe stream. Original exception: {ex}");
+            
             // If we can't even write the error, log it
             System.Diagnostics.Debug.WriteLine($"RevitXunitExecutor: Failed to write error message: {writeEx}");
             System.Diagnostics.Debug.WriteLine($"RevitXunitExecutor: Original exception: {ex}");
@@ -152,9 +214,10 @@ public static class RevitXunitExecutor
 }
 
 // Clean xUnit integration without reflection
-internal class StreamingXmlTestExecutionVisitor(StreamWriter writer, XElement assemblyElement, Func<bool> cancelThunk) : XmlTestExecutionVisitor(assemblyElement, cancelThunk)
+internal class StreamingXmlTestExecutionVisitor(StreamWriter writer, XElement assemblyElement, Func<bool> cancelThunk, ILogger? logger = null) : XmlTestExecutionVisitor(assemblyElement, cancelThunk)
 {
     private readonly StreamWriter _writer = writer;
+    private readonly ILogger _logger = logger ?? FileLogger.ForContext<StreamingXmlTestExecutionVisitor>();
 
     private void Send(PipeTestResultMessage msg)
     {
@@ -165,6 +228,8 @@ internal class StreamingXmlTestExecutionVisitor(StreamWriter writer, XElement as
 
     protected override bool Visit(ITestPassed testPassed)
     {
+        _logger.LogInformation($"Test passed: {testPassed.Test.DisplayName} in {testPassed.ExecutionTime * 1000:F0}ms");
+            
         Send(new PipeTestResultMessage
         {
             Name = testPassed.Test.DisplayName,
@@ -176,12 +241,15 @@ internal class StreamingXmlTestExecutionVisitor(StreamWriter writer, XElement as
 
     protected override bool Visit(ITestFailed testFailed)
     {
+        var errorMessage = string.Join(Environment.NewLine, testFailed.Messages ?? []);
+        _logger.LogWarning($"Test failed: {testFailed.Test.DisplayName} in {testFailed.ExecutionTime * 1000:F0}ms - {errorMessage}");
+            
         Send(new PipeTestResultMessage
         {
             Name = testFailed.Test.DisplayName,
             Outcome = "Failed",
             Duration = (double)testFailed.ExecutionTime,
-            ErrorMessage = string.Join(Environment.NewLine, testFailed.Messages ?? []),
+            ErrorMessage = errorMessage,
             ErrorStackTrace = string.Join(Environment.NewLine, testFailed.StackTraces ?? [])
         });
         return base.Visit(testFailed);
@@ -189,6 +257,8 @@ internal class StreamingXmlTestExecutionVisitor(StreamWriter writer, XElement as
 
     protected override bool Visit(ITestSkipped testSkipped)
     {
+        _logger.LogInformation($"Test skipped: {testSkipped.Test.DisplayName} - {testSkipped.Reason}");
+            
         Send(new PipeTestResultMessage
         {
             Name = testSkipped.Test.DisplayName,
