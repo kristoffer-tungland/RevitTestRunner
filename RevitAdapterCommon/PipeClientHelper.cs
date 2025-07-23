@@ -506,29 +506,6 @@ public static class PipeClientHelper
     }
 
     /// <summary>
-    /// Connects to a Revit process using the new pipe naming format (assembly version + process ID based)
-    /// </summary>
-    /// <param name="revitVersion">The Revit version to connect to (used for process selection)</param>
-    /// <returns>Connected NamedPipeClientStream</returns>
-    public static NamedPipeClientStream ConnectToRevit(string revitVersion)
-    {
-        return ConnectToRevit(revitVersion, null);
-    }
-
-    /// <summary>
-    /// Connects to a Revit process using the new pipe naming format (assembly version + process ID based)
-    /// If no running Revit process is found, launches a new hidden instance.
-    /// </summary>
-    /// <param name="revitVersion">The Revit version to connect to (used for process selection)</param>
-    /// <param name="logger">Optional logger for sending informational messages to test console</param>
-    /// <returns>Connected NamedPipeClientStream</returns>
-    public static NamedPipeClientStream ConnectToRevit(string revitVersion, ILogger? logger)
-    {
-        var result = ConnectToRevitWithProcessId(revitVersion, logger);
-        return result.Client;
-    }
-
-    /// <summary>
     /// Ensures the Revit addin is installed before attempting to connect
     /// </summary>
     /// <param name="revitVersion">The Revit version to install for</param>
@@ -843,10 +820,20 @@ public static class PipeClientHelper
 
         logger?.LogInformation($"PipeClientHelper: Found {revitProcesses.Length} running Revit process(es)");
 
+            var revitVersionName = revitVersion.Substring(2, 2); // Get the last two digits of the version (e.g., "25" for "2025")
+
         // Try to connect to each existing Revit process using the new naming format
         foreach (var proc in revitProcesses)
         {
             logger?.LogInformation($"PipeClientHelper: Attempting to connect to Revit process ID {proc.Id}");
+
+            var procVersioname = proc.MainModule?.FileVersionInfo.FileMajorPart; // equals 25 for revitVersion 2025
+
+            if (procVersioname == null || !procVersioname.Value.ToString().Equals(revitVersionName, StringComparison.OrdinalIgnoreCase))
+            {
+                logger?.LogInformation($"PipeClientHelper: Skipping Revit process {proc.Id} with version {procVersioname}");
+                continue; // Skip processes that don't match the requested version
+            }
 
             try
             {
@@ -861,7 +848,7 @@ public static class PipeClientHelper
                 var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
                 try
                 {
-                    client.Connect(100);
+                    client.Connect(1000);
                     logger?.LogInformation($"PipeClientHelper: Successfully connected to Revit process {proc.Id} via pipe '{pipeName}'");
                     return new RevitConnectionResult(client, proc.Id);
                 }

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Threading;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Xunit.Abstractions;
@@ -11,7 +12,8 @@ namespace RevitTestFramework.Xunit;
 public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayName, string skipReason,
     object[] constructorArguments, IMessageBus messageBus,
     ExceptionAggregator aggregator, CancellationTokenSource cancellationTokenSource,
-    string? projectGuid, string? modelGuid, string? localPath) : XunitTestCaseRunner(testCase, displayName, skipReason, constructorArguments, [],
+    string? projectGuid, string? modelGuid, string? localPath) : XunitTestCaseRunner(testCase, displayName, skipReason, constructorArguments, 
+           CreateTestMethodArguments(testCase.TestMethod.Method.ToRuntimeMethod()),
            messageBus, aggregator, cancellationTokenSource)
 {
     private readonly ExceptionAggregator _aggregator = aggregator;
@@ -21,6 +23,69 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
 
     private Document? _document;
     private TransactionGroup? _transactionGroup;
+
+    /// <summary>
+    /// Creates test method arguments with the correct values for the base constructor.
+    /// This handles parameter injection for supported types.
+    /// </summary>
+    private static object?[] CreateTestMethodArguments(MethodInfo testMethod)
+    {
+        var parameters = testMethod.GetParameters();
+        var args = new object?[parameters.Length];
+        
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var paramType = parameters[i].ParameterType;
+            var isNullable = paramType.IsGenericType && paramType.GetGenericTypeDefinition() == typeof(Nullable<>) ||
+                            !paramType.IsValueType;
+            
+            if (paramType == typeof(UIApplication))
+            {
+                // Note: UIApplication will be injected later when infrastructure is available
+                args[i] = null; // Placeholder - will be replaced in CreateTestRunner
+            }
+            else if (paramType == typeof(Document) || 
+                    (paramType.IsGenericType && paramType.GetGenericTypeDefinition() == typeof(Nullable<>) && 
+                     Nullable.GetUnderlyingType(paramType) == typeof(Document)) ||
+                    (paramType == typeof(Document) && isNullable))
+            {
+                // Note: Document will be injected later when available
+                args[i] = null; // Placeholder - will be replaced in CreateTestRunner
+            }
+            else if (paramType == typeof(CancellationToken))
+            {
+                // Use default CancellationToken for now - will be replaced in CreateTestRunner
+                args[i] = CancellationToken.None;
+            }
+            else if (paramType == typeof(CancellationToken?) || 
+                    (paramType.IsGenericType && paramType.GetGenericTypeDefinition() == typeof(Nullable<>) && 
+                     Nullable.GetUnderlyingType(paramType) == typeof(CancellationToken)))
+            {
+                // Use null for nullable CancellationToken - will be replaced in CreateTestRunner
+                args[i] = null;
+            }
+            else if (isNullable)
+            {
+                // For other nullable parameters, use null
+                args[i] = null;
+            }
+            else
+            {
+                // For non-nullable parameters we don't support, we need to provide a default value
+                // This will be caught later in CreateTestRunner with a better error message
+                try
+                {
+                    args[i] = paramType.IsValueType ? Activator.CreateInstance(paramType) : null;
+                }
+                catch
+                {
+                    args[i] = null;
+                }
+            }
+        }
+        
+        return args;
+    }
 
     protected override async Task<RunSummary> RunTestAsync()
     {
@@ -179,7 +244,7 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
         Type testClass,
         object[] constructorArguments,
         MethodInfo testMethod,
-        object[] testMethodArguments,
+        object?[] testMethodArguments,
         string skipReason,
         IReadOnlyList<BeforeAfterTestAttribute> beforeAfterAttributes,
         ExceptionAggregator aggregator,
@@ -187,54 +252,46 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
     {
         var parameters = testMethod.GetParameters();
         
-        // If the test method has no parameters, don't inject anything
-        if (parameters.Length == 0)
+        // Replace placeholder values with actual injected values
+        for (int i = 0; i < parameters.Length; i++)
         {
-            testMethodArguments = [];
-        }
-        else if (parameters.Length > testMethodArguments.Length)
-        {
-            // Build dynamic arguments based on parameter types
-            var args = new List<object?>();
+            var paramType = parameters[i].ParameterType;
+            var isNullable = paramType.IsGenericType && paramType.GetGenericTypeDefinition() == typeof(Nullable<>) ||
+                            !paramType.IsValueType;
             
-            // Copy any existing arguments first
-            args.AddRange(testMethodArguments.Cast<object?>());
-            
-            // Inject required arguments based on parameter types
-            for (int i = testMethodArguments.Length; i < parameters.Length; i++)
+            if (paramType == typeof(UIApplication))
             {
-                var paramType = parameters[i].ParameterType;
-                var isNullable = paramType.IsGenericType && paramType.GetGenericTypeDefinition() == typeof(Nullable<>) ||
-                                !paramType.IsValueType;
-                
-                if (paramType == typeof(UIApplication))
-                {
-                    // Inject UIApplication from static infrastructure
-                    args.Add(RevitTestInfrastructure.UIApplication);
-                }
-                else if (paramType == typeof(Document) || 
-                        (paramType.IsGenericType && paramType.GetGenericTypeDefinition() == typeof(Nullable<>) && 
-                         Nullable.GetUnderlyingType(paramType) == typeof(Document)) ||
-                        (paramType == typeof(Document) && isNullable))
-                {
-                    // Inject document if available, or null for nullable Document parameters
-                    args.Add(_document);
-                }
-                else if (isNullable)
-                {
-                    // For other nullable parameters, inject null
-                    args.Add(null);
-                }
-                else
-                {
-                    // For non-nullable parameters we don't support, throw an exception
-                    throw new InvalidOperationException(
-                        $"Test method '{testMethod.Name}' has unsupported parameter type '{paramType.Name}' at position {i}. " +
-                        "Supported types are: UIApplication, Document, Document?");
-                }
+                // Inject UIApplication from static infrastructure
+                testMethodArguments[i] = RevitTestInfrastructure.UIApplication;
             }
-            
-            testMethodArguments = args.ToArray();
+            else if (paramType == typeof(Document) || 
+                    (paramType.IsGenericType && paramType.GetGenericTypeDefinition() == typeof(Nullable<>) && 
+                     Nullable.GetUnderlyingType(paramType) == typeof(Document)) ||
+                    (paramType == typeof(Document) && isNullable))
+            {
+                // Inject document if available, or null for nullable Document parameters
+                testMethodArguments[i] = _document;
+            }
+            else if (paramType == typeof(CancellationToken))
+            {
+                // Inject CancellationToken from static infrastructure, or default if not available
+                testMethodArguments[i] = RevitTestInfrastructure.CancellationToken ?? CancellationToken.None;
+            }
+            else if (paramType == typeof(CancellationToken?) || 
+                    (paramType.IsGenericType && paramType.GetGenericTypeDefinition() == typeof(Nullable<>) && 
+                     Nullable.GetUnderlyingType(paramType) == typeof(CancellationToken)))
+            {
+                // Inject nullable CancellationToken from static infrastructure
+                testMethodArguments[i] = RevitTestInfrastructure.CancellationToken;
+            }
+            else if (!isNullable && testMethodArguments[i] == null)
+            {
+                // For non-nullable parameters we don't support, throw an exception
+                throw new InvalidOperationException(
+                    $"Test method '{testMethod.Name}' has unsupported parameter type '{paramType.Name}' at position {i}. " +
+                    "Supported types are: UIApplication, Document, Document?, CancellationToken, CancellationToken?");
+            }
+            // For nullable parameters that we don't explicitly handle, leave them as null (already set)
         }
 
         return new RevitUITestRunner(test, messageBus, testClass, constructorArguments,
@@ -246,7 +303,7 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
 /// Custom test runner that ensures test method execution happens on UI thread when needed
 /// </summary>
 public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClass, object[] constructorArguments,
-    MethodInfo testMethod, object[] testMethodArguments, string skipReason,
+    MethodInfo testMethod, object?[] testMethodArguments, string skipReason,
     IReadOnlyList<BeforeAfterTestAttribute> beforeAfterAttributes, ExceptionAggregator aggregator,
     CancellationTokenSource cancellationTokenSource) : XunitTestRunner(test, messageBus, testClass, constructorArguments, testMethod, testMethodArguments,
            skipReason, beforeAfterAttributes, aggregator, cancellationTokenSource)

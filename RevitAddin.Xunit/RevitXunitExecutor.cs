@@ -67,7 +67,7 @@ public static class RevitXunitExecutor
             }
         }
 
-        RevitModelService.CancellationToken = cancellationToken;
+        RevitTestInfrastructure.CancellationToken = cancellationToken;
         var methods = command.TestMethods;
 
         // Execute tests on a background thread to avoid blocking Revit UI

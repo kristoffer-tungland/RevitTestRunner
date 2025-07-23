@@ -15,6 +15,8 @@ public static class RevitTestInfrastructure
     
     public static UIApplication UIApplication { get => _uiApplication ?? throw new InvalidOperationException("UIApplication is not initialized. Call Setup first."); }
 
+    public static CancellationToken? CancellationToken { get; set; }
+
     public static void Setup(UIApplication uiApp)
     {
         _uiApplication = uiApp;
@@ -25,5 +27,6 @@ public static class RevitTestInfrastructure
     {
         _revitTask?.Dispose();
         _uiApplication = null;
+        CancellationToken = null;
     }
 }

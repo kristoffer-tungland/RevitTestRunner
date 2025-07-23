@@ -40,6 +40,7 @@ public class RevitApplication : IExternalApplication
         }
         catch (Exception ex)
         {
+            
             Trace.WriteLine($"RevitAddin.Xunit startup failed: {ex.Message}");
             Trace.WriteLine($"Stack trace: {ex}");
             
