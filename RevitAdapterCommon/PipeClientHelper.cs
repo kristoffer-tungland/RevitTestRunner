@@ -934,7 +934,7 @@ public static class PipeClientHelper
 
         var json = JsonSerializer.Serialize(command);
 
-        // Create StreamWriter in a try-catch to handle disposal issues
+        // Create StreamWriter with improved exception handling for disposal
         StreamWriter? sw = null;
         try
         {
@@ -945,16 +945,35 @@ public static class PipeClientHelper
         catch (ObjectDisposedException)
         {
             // Pipe was already closed, ignore disposal issues
+            logger?.LogInformation("PipeClientHelper: Pipe was already closed when trying to write command");
+        }
+        catch (IOException ex) when (ex.Message.Contains("Pipe is broken") || ex.Message.Contains("pipe has been ended"))
+        {
+            // Pipe is broken, ignore and continue with cleanup
+            logger?.LogInformation("PipeClientHelper: Pipe was broken when trying to write command");
         }
         finally
         {
-            try
+            if (sw != null)
             {
-                sw?.Dispose();
-            }
-            catch (ObjectDisposedException)
-            {
-                // Ignore disposal exceptions when pipe is already closed
+                try
+                {
+                    sw.Dispose();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Ignore disposal exceptions when pipe is already closed
+                }
+                catch (IOException ex) when (ex.Message.Contains("Pipe is broken") || ex.Message.Contains("pipe has been ended"))
+                {
+                    // Ignore pipe broken exceptions during disposal
+                    logger?.LogInformation("PipeClientHelper: Pipe was broken during StreamWriter disposal - this is expected during cleanup");
+                }
+                catch (Exception ex)
+                {
+                    // Log other unexpected exceptions but don't rethrow
+                    logger?.LogError($"PipeClientHelper: Unexpected error during StreamWriter disposal: {ex.Message}");
+                }
             }
         }
 
@@ -966,9 +985,24 @@ public static class PipeClientHelper
                 cancellationToken.WaitHandle.WaitOne();
                 if (cancelServer.IsConnected)
                 {
-                    using var cw = new StreamWriter(cancelServer);
-                    cw.WriteLine("CANCEL");
-                    cw.Flush();
+                    try
+                    {
+                        using var cw = new StreamWriter(cancelServer);
+                        cw.WriteLine("CANCEL");
+                        cw.Flush();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // Cancel server was already disposed
+                    }
+                    catch (IOException ex) when (ex.Message.Contains("Pipe is broken") || ex.Message.Contains("pipe has been ended"))
+                    {
+                        // Cancel pipe is broken, ignore
+                    }
+                    catch (Exception ex)
+                    {
+                        logger?.LogError($"PipeClientHelper: Error writing to cancel pipe: {ex.Message}");
+                    }
                 }
             });
         });
@@ -986,6 +1020,16 @@ public static class PipeClientHelper
                     break;
                 }
             }
+        }
+        catch (ObjectDisposedException)
+        {
+            // Reader was already disposed, ignore
+            logger?.LogInformation("PipeClientHelper: StreamReader was already disposed");
+        }
+        catch (IOException ex) when (ex.Message.Contains("Pipe is broken") || ex.Message.Contains("pipe has been ended"))
+        {
+            // Pipe is broken during reading, this is expected during cleanup
+            logger?.LogInformation("PipeClientHelper: Pipe was broken during reading - this is expected during cleanup");
         }
         finally
         {
@@ -1363,7 +1407,7 @@ public static class PipeClientHelper
 
             // Enhanced fallback: If we didn't find devenv.exe in the process tree, look for any running devenv.exe processes
             // and try to match based on solution name in MainWindowTitle
-            logger?.LogInformation("PipeClientHelper: Visual Studio not found in process tree, checking for any running devenv.exe processes");
+            logger?.LogInformation("PipeClientHelper: Visual Studio not found in process tree, checking for any devenv.exe processes");
 
             var devenvProcesses = Process.GetProcessesByName("devenv");
             if (devenvProcesses.Length > 0)

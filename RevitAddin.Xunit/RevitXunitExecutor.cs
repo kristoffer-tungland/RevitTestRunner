@@ -202,6 +202,16 @@ public static class RevitXunitExecutor
             // Log the exception for debugging
             System.Diagnostics.Debug.WriteLine($"RevitXunitExecutor: Test execution failed with exception: {ex}");
         }
+        catch (ObjectDisposedException)
+        {
+            // Writer was already disposed, log to file only
+            logger.LogWarning("Cannot write error message to pipe - writer was already disposed");
+        }
+        catch (IOException ioEx) when (ioEx.Message.Contains("Pipe is broken") || ioEx.Message.Contains("pipe has been ended"))
+        {
+            // Pipe is broken, log to file only
+            logger.LogWarning("Cannot write error message to pipe - pipe is broken");
+        }
         catch (Exception writeEx)
         {
             logger.LogFatal(writeEx, $"Failed to write error message to pipe stream. Original exception: {ex}");
@@ -221,9 +231,27 @@ internal class StreamingXmlTestExecutionVisitor(StreamWriter writer, XElement as
 
     private void Send(PipeTestResultMessage msg)
     {
-        var json = JsonSerializer.Serialize(msg);
-        _writer.WriteLine(json);
-        _writer.Flush();
+        try
+        {
+            var json = JsonSerializer.Serialize(msg);
+            _writer.WriteLine(json);
+            _writer.Flush();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Writer was already disposed, log to file only
+            _logger.LogWarning("Cannot send test result message to pipe - writer was already disposed");
+        }
+        catch (IOException ex) when (ex.Message.Contains("Pipe is broken") || ex.Message.Contains("pipe has been ended"))
+        {
+            // Pipe is broken, log to file only
+            _logger.LogWarning("Cannot send test result message to pipe - pipe is broken");
+        }
+        catch (Exception ex)
+        {
+            // Log other exceptions but don't fail the test execution
+            _logger.LogError(ex, "Error sending test result message to pipe");
+        }
     }
 
     protected override bool Visit(ITestPassed testPassed)

@@ -82,13 +82,18 @@ public class MyRevitTestsClass
     }
 
     [RevitFact]
-    public void Should_Cancel_WhenCancellationRequested(CancellationToken cancellationToken)
+    public void Should_ExitLoop_WhenCancellationIsRequested(CancellationToken cancellationToken)
     {
         // Use thread sleep to simulate a long-running operation
         Assert.False(cancellationToken.IsCancellationRequested, "Cancellation was not requested before the test started");
-        // Simulate a long-running operation
-        System.Threading.Thread.Sleep(5000);
-        Assert.False(cancellationToken.IsCancellationRequested, "Cancellation was not requested during the test execution");
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            // Simulate some work
+            System.Threading.Thread.Sleep(1000);
+        }
+
+        Assert.True(cancellationToken.IsCancellationRequested, "Cancellation was requested during the test");
     }
 
     [RevitFact]
