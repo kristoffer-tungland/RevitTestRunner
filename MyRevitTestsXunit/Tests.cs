@@ -82,6 +82,35 @@ public class MyRevitTestsClass
     }
 
     [RevitFact]
+    public void Should_ExitLoop_WhenCancellationIsRequested(CancellationToken cancellationToken)
+    {
+        // Use thread sleep to simulate a long-running operation
+        Assert.False(cancellationToken.IsCancellationRequested, "Cancellation was not requested before the test started");
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            // Simulate some work
+            System.Threading.Thread.Sleep(1000);
+        }
+
+        Assert.True(cancellationToken.IsCancellationRequested, "Cancellation was requested during the test");
+    }
+
+    [RevitFact]
+    public void Should_HandleNullableCancellationToken_WhenCancellationMayNotBeAvailable(CancellationToken? cancellationToken)
+    {
+        // This test demonstrates using nullable CancellationToken parameter
+        if (cancellationToken.HasValue)
+        {
+            Assert.False(cancellationToken.Value.IsCancellationRequested, "Cancellation was not requested");
+        }
+        else
+        {
+            Assert.True(cancellationToken == null, "No cancellation token was provided");
+        }
+    }
+
+    [RevitFact]
     public void Should_RunSuccessfully_WhenNoRevitDocumentIsRequired()
     {
         // This test doesn't require a document at all

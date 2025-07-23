@@ -11,35 +11,41 @@ public class RevitApplication : IExternalApplication
 {
     private PipeServer? _server;
     private RevitTask? _revitTask;
+    private static readonly ILogger Logger = FileLogger.Instance;
 
     public Result OnStartup(UIControlledApplication application)
     {
         try
         {
+            Logger.LogInformation("RevitAddin.Xunit startup beginning");
+            
             // Register assembly resolution handler
             AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
 
             // Log startup info
             string addinLocation = Assembly.GetExecutingAssembly().Location;
-            Trace.WriteLine($"RevitAddin.Xunit starting from: {addinLocation}");
+            Logger.LogInformation($"RevitAddin.Xunit starting from: {addinLocation}");
 
             // Extract Revit version from the application
             var revitVersion = application.ControlledApplication.VersionNumber;
-            Trace.WriteLine($"RevitAddin.Xunit detected Revit version: {revitVersion}");
+            Logger.LogInformation($"RevitAddin.Xunit detected Revit version: {revitVersion}");
 
             // Use RevitTask to manage UI thread execution
             _revitTask = new RevitTask();
             var pipeName = PipeNaming.GetCurrentProcessPipeName();
-            Trace.WriteLine($"RevitAddin.Xunit using pipe name: {pipeName}");
+            Logger.LogInformation($"RevitAddin.Xunit using pipe name: {pipeName}");
             
             _server = new PipeServer(pipeName, _revitTask, path => new XunitTestAssemblyLoadContext(path));
             _server.Start();
             
-            Trace.WriteLine("RevitAddin.Xunit startup completed successfully");
+            Logger.LogInformation("RevitAddin.Xunit startup completed successfully");
             return Result.Succeeded;
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "RevitAddin.Xunit startup failed");
+            
+            // Also log to Trace as fallback
             Trace.WriteLine($"RevitAddin.Xunit startup failed: {ex.Message}");
             Trace.WriteLine($"Stack trace: {ex}");
             
@@ -51,6 +57,7 @@ public class RevitApplication : IExternalApplication
             }
             catch (Exception cleanupEx)
             {
+                Logger.LogError(cleanupEx, "Error during startup cleanup");
                 Trace.WriteLine($"Error during startup cleanup: {cleanupEx.Message}");
             }
             
@@ -62,7 +69,7 @@ public class RevitApplication : IExternalApplication
     {
         try
         {
-            Trace.WriteLine("RevitAddin.Xunit shutdown starting");
+            Logger.LogInformation("RevitAddin.Xunit shutdown starting");
             
             // Unregister assembly resolution handler
             AppDomain.CurrentDomain.AssemblyResolve -= CurrentDomain_AssemblyResolve;
@@ -70,11 +77,15 @@ public class RevitApplication : IExternalApplication
             _server?.Dispose();
             _revitTask?.Dispose();
             
-            Trace.WriteLine("RevitAddin.Xunit shutdown completed successfully");
+            Logger.LogInformation("RevitAddin.Xunit shutdown completed successfully");
+            
             return Result.Succeeded;
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "RevitAddin.Xunit shutdown failed");
+            
+            // Also log to Trace as fallback
             Trace.WriteLine($"RevitAddin.Xunit shutdown failed: {ex.Message}");
             Trace.WriteLine($"Stack trace: {ex}");
             
@@ -101,7 +112,7 @@ public class RevitApplication : IExternalApplication
             string potentialPath = Path.Combine(assemblyDirectory, $"{assemblyName.Name}.dll");
             if (File.Exists(potentialPath))
             {
-                Trace.WriteLine($"Resolved assembly: {assemblyName.Name} from: {potentialPath}");
+                Logger.LogDebug($"Resolved assembly: {assemblyName.Name} from: {potentialPath}");
                 return Assembly.LoadFrom(potentialPath);
             }
 
@@ -109,17 +120,86 @@ public class RevitApplication : IExternalApplication
             string[] candidateFiles = Directory.GetFiles(assemblyDirectory, $"{assemblyName.Name}*.dll");
             if (candidateFiles.Length > 0)
             {
-                Trace.WriteLine($"Resolved assembly: {assemblyName.Name} from: {candidateFiles[0]}");
+                Logger.LogDebug($"Resolved assembly: {assemblyName.Name} from: {candidateFiles[0]}");
                 return Assembly.LoadFrom(candidateFiles[0]);
             }
 
-            Trace.WriteLine($"Failed to resolve assembly: {assemblyName.Name}");
+            // Only log warnings for assemblies that we expect to find but failed to resolve
+            // Skip common system assemblies that should be resolved by the default context
+            if (ShouldLogAssemblyResolutionFailure(assemblyName.Name))
+            {
+                Logger.LogWarning($"Failed to resolve assembly: {assemblyName.Name}");
+            }
+            else
+            {
+                Logger.LogDebug($"Assembly resolution delegated to default loader: {assemblyName.Name}");
+            }
+            
             return null;
         }
         catch (Exception ex)
         {
-            Trace.WriteLine($"Error resolving assembly: {ex.Message}");
+            Logger.LogError(ex, $"Error resolving assembly: {args.Name}");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Determines whether an assembly resolution failure should be logged as a warning
+    /// </summary>
+    /// <param name="assemblyName">The name of the assembly that failed to resolve</param>
+    /// <returns>True if the failure should be logged as a warning, false if it should be logged as debug</returns>
+    private static bool ShouldLogAssemblyResolutionFailure(string? assemblyName)
+    {
+        if (string.IsNullOrEmpty(assemblyName))
+            return false;
+
+        // System assemblies - these are expected to be resolved by the default context
+        var systemAssemblies = new[]
+        {
+            "System.Runtime",
+            "System.Collections",
+            "System.Linq",
+            "System.Text.Json",
+            "System.Threading",
+            "System.Threading.Tasks",
+            "System.Memory",
+            "System.Diagnostics.Debug",
+            "System.IO",
+            "System.Reflection",
+            "System.ComponentModel",
+            "System.Diagnostics.Process",
+            "System.Xml.XDocument", 
+            "System.Globalization",
+            "System.Diagnostics.TraceSource",
+            "System.IO.FileSystem",
+            "System.Runtime.Extensions",
+            "System.Reflection.Extensions",
+            "System.Collections.Concurrent",
+            "System.Threading.Thread",
+            "Microsoft.Extensions.DependencyInjection",
+            "Microsoft.Extensions.Logging"
+        };
+
+        // Revit API assemblies - these should be resolved by the main AppDomain
+        var revitAssemblies = new[]
+        {
+            "RevitAPI",
+            "RevitAPIUI",
+            "AdWindows",
+            "UIFramework"
+        };
+
+        // Visual Studio and testing framework assemblies
+        var vsTestingAssemblies = new[]
+        {
+            "Microsoft.VisualStudio.TestPlatform",
+            "Microsoft.TestPlatform",
+            "testhost"
+        };
+
+        return !systemAssemblies.Any(sys => assemblyName.StartsWith(sys, StringComparison.OrdinalIgnoreCase)) &&
+               !revitAssemblies.Any(revit => assemblyName.StartsWith(revit, StringComparison.OrdinalIgnoreCase)) &&
+               !vsTestingAssemblies.Any(vs => assemblyName.StartsWith(vs, StringComparison.OrdinalIgnoreCase));
     }
 }

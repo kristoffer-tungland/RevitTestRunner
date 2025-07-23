@@ -506,29 +506,6 @@ public static class PipeClientHelper
     }
 
     /// <summary>
-    /// Connects to a Revit process using the new pipe naming format (assembly version + process ID based)
-    /// </summary>
-    /// <param name="revitVersion">The Revit version to connect to (used for process selection)</param>
-    /// <returns>Connected NamedPipeClientStream</returns>
-    public static NamedPipeClientStream ConnectToRevit(string revitVersion)
-    {
-        return ConnectToRevit(revitVersion, null);
-    }
-
-    /// <summary>
-    /// Connects to a Revit process using the new pipe naming format (assembly version + process ID based)
-    /// If no running Revit process is found, launches a new hidden instance.
-    /// </summary>
-    /// <param name="revitVersion">The Revit version to connect to (used for process selection)</param>
-    /// <param name="logger">Optional logger for sending informational messages to test console</param>
-    /// <returns>Connected NamedPipeClientStream</returns>
-    public static NamedPipeClientStream ConnectToRevit(string revitVersion, ILogger? logger)
-    {
-        var result = ConnectToRevitWithProcessId(revitVersion, logger);
-        return result.Client;
-    }
-
-    /// <summary>
     /// Ensures the Revit addin is installed before attempting to connect
     /// </summary>
     /// <param name="revitVersion">The Revit version to install for</param>
@@ -843,10 +820,20 @@ public static class PipeClientHelper
 
         logger?.LogInformation($"PipeClientHelper: Found {revitProcesses.Length} running Revit process(es)");
 
+            var revitVersionName = revitVersion.Substring(2, 2); // Get the last two digits of the version (e.g., "25" for "2025")
+
         // Try to connect to each existing Revit process using the new naming format
         foreach (var proc in revitProcesses)
         {
             logger?.LogInformation($"PipeClientHelper: Attempting to connect to Revit process ID {proc.Id}");
+
+            var procVersioname = proc.MainModule?.FileVersionInfo.FileMajorPart; // equals 25 for revitVersion 2025
+
+            if (procVersioname == null || !procVersioname.Value.ToString().Equals(revitVersionName, StringComparison.OrdinalIgnoreCase))
+            {
+                logger?.LogInformation($"PipeClientHelper: Skipping Revit process {proc.Id} with version {procVersioname}");
+                continue; // Skip processes that don't match the requested version
+            }
 
             try
             {
@@ -922,57 +909,6 @@ public static class PipeClientHelper
     }
 
     /// <summary>
-    /// Sends a command using the new connection method with Revit version
-    /// </summary>
-    /// <param name="command">The command to send</param>
-    /// <param name="revitVersion">The Revit version to connect to</param>
-    /// <returns>The response from the server</returns>
-    public static string SendCommand(object command, string revitVersion)
-    {
-        return SendCommand(command, revitVersion, null);
-    }
-
-    /// <summary>
-    /// Sends a command using the new connection method with Revit version
-    /// </summary>
-    /// <param name="command">The command to send</param>
-    /// <param name="revitVersion">The Revit version to connect to</param>
-    /// <param name="logger">Optional logger for sending informational messages to test console</param>
-    /// <returns>The response from the server</returns>
-    public static string SendCommand(object command, string revitVersion, ILogger? logger)
-    {
-        var connectionResult = ConnectToRevitWithProcessId(revitVersion, logger);
-        using var client = connectionResult.Client;
-        var json = JsonSerializer.Serialize(command);
-        using var sw = new StreamWriter(client, leaveOpen: true);
-        sw.WriteLine(json);
-        sw.Flush();
-        using var sr = new StreamReader(client);
-        var result = sr.ReadLine() ?? string.Empty;
-        return result;
-    }
-
-    /// <summary>
-    /// Sends a command using the new connection method with Revit version
-    /// </summary>
-    /// <param name="command">The command to send</param>
-    /// <param name="revitVersion">The Revit version to connect to</param>
-    /// <param name="frameworkHandle">Framework handle for sending informational messages to test console</param>
-    /// <returns>The response from the server</returns>
-    public static string SendCommand(object command, string revitVersion, object frameworkHandle)
-    {
-        try
-        {
-            return SendCommand(command, revitVersion, frameworkHandle.ToLogger());
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"PipeClientHelper: Failed to create logger from framework handle: {ex.Message}");
-            return SendCommand(command, revitVersion, null);
-        }
-    }
-
-    /// <summary>
     /// Sends a streaming command using the new connection method with Revit version
     /// </summary>
     /// <param name="command">The pipe command to send</param>
@@ -998,7 +934,7 @@ public static class PipeClientHelper
 
         var json = JsonSerializer.Serialize(command);
 
-        // Create StreamWriter in a try-catch to handle disposal issues
+        // Create StreamWriter with improved exception handling for disposal
         StreamWriter? sw = null;
         try
         {
@@ -1009,16 +945,35 @@ public static class PipeClientHelper
         catch (ObjectDisposedException)
         {
             // Pipe was already closed, ignore disposal issues
+            logger?.LogInformation("PipeClientHelper: Pipe was already closed when trying to write command");
+        }
+        catch (IOException ex) when (ex.Message.Contains("Pipe is broken") || ex.Message.Contains("pipe has been ended"))
+        {
+            // Pipe is broken, ignore and continue with cleanup
+            logger?.LogInformation("PipeClientHelper: Pipe was broken when trying to write command");
         }
         finally
         {
-            try
+            if (sw != null)
             {
-                sw?.Dispose();
-            }
-            catch (ObjectDisposedException)
-            {
-                // Ignore disposal exceptions when pipe is already closed
+                try
+                {
+                    sw.Dispose();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Ignore disposal exceptions when pipe is already closed
+                }
+                catch (IOException ex) when (ex.Message.Contains("Pipe is broken") || ex.Message.Contains("pipe has been ended"))
+                {
+                    // Ignore pipe broken exceptions during disposal
+                    logger?.LogInformation("PipeClientHelper: Pipe was broken during StreamWriter disposal - this is expected during cleanup");
+                }
+                catch (Exception ex)
+                {
+                    // Log other unexpected exceptions but don't rethrow
+                    logger?.LogError($"PipeClientHelper: Unexpected error during StreamWriter disposal: {ex.Message}");
+                }
             }
         }
 
@@ -1030,9 +985,24 @@ public static class PipeClientHelper
                 cancellationToken.WaitHandle.WaitOne();
                 if (cancelServer.IsConnected)
                 {
-                    using var cw = new StreamWriter(cancelServer);
-                    cw.WriteLine("CANCEL");
-                    cw.Flush();
+                    try
+                    {
+                        using var cw = new StreamWriter(cancelServer);
+                        cw.WriteLine("CANCEL");
+                        cw.Flush();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // Cancel server was already disposed
+                    }
+                    catch (IOException ex) when (ex.Message.Contains("Pipe is broken") || ex.Message.Contains("pipe has been ended"))
+                    {
+                        // Cancel pipe is broken, ignore
+                    }
+                    catch (Exception ex)
+                    {
+                        logger?.LogError($"PipeClientHelper: Error writing to cancel pipe: {ex.Message}");
+                    }
                 }
             });
         });
@@ -1050,6 +1020,16 @@ public static class PipeClientHelper
                     break;
                 }
             }
+        }
+        catch (ObjectDisposedException)
+        {
+            // Reader was already disposed, ignore
+            logger?.LogInformation("PipeClientHelper: StreamReader was already disposed");
+        }
+        catch (IOException ex) when (ex.Message.Contains("Pipe is broken") || ex.Message.Contains("pipe has been ended"))
+        {
+            // Pipe is broken during reading, this is expected during cleanup
+            logger?.LogInformation("PipeClientHelper: Pipe was broken during reading - this is expected during cleanup");
         }
         finally
         {
@@ -1085,16 +1065,6 @@ public static class PipeClientHelper
                 }
             }
         }
-    }
-
-    /// <summary>
-    /// Attempts to attach the current debugger to a specific Revit process
-    /// </summary>
-    /// <param name="processId">The specific Revit process ID to attach to</param>
-    /// <param name="logger">Optional logger for sending informational messages</param>
-    private static void TryAttachDebuggerToRevit(int processId, ILogger? logger)
-    {
-        TryAttachDebuggerToRevit(processId, logger, null);
     }
 
     /// <summary>
@@ -1437,7 +1407,7 @@ public static class PipeClientHelper
 
             // Enhanced fallback: If we didn't find devenv.exe in the process tree, look for any running devenv.exe processes
             // and try to match based on solution name in MainWindowTitle
-            logger?.LogInformation("PipeClientHelper: Visual Studio not found in process tree, checking for any running devenv.exe processes");
+            logger?.LogInformation("PipeClientHelper: Visual Studio not found in process tree, checking for any devenv.exe processes");
 
             var devenvProcesses = Process.GetProcessesByName("devenv");
             if (devenvProcesses.Length > 0)
