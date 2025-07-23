@@ -848,7 +848,7 @@ public static class PipeClientHelper
                 var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
                 try
                 {
-                    client.Connect(1000);
+                    client.Connect(100);
                     logger?.LogInformation($"PipeClientHelper: Successfully connected to Revit process {proc.Id} via pipe '{pipeName}'");
                     return new RevitConnectionResult(client, proc.Id);
                 }
