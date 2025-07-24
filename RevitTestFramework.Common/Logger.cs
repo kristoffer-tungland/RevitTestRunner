@@ -1,8 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
-using RevitTestFramework.Contracts;
 
-namespace RevitAddin.Common;
+namespace RevitTestFramework.Common;
 
 /// <summary>
 /// Simple logging interface to avoid external dependencies
@@ -53,7 +52,7 @@ public class FileLogger : ILogger
             {
                 var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
                 var logDirectory = Path.Combine(appDataPath, "RevitTestRunner", "Logs");
-                var logFileName = $"RevitAddin.Xunit-{DateTime.Now:yyyyMMdd}.log";
+                var logFileName = $"RevitTestFramework.Common-{DateTime.Now:yyyyMMdd}.log";
                 var logFilePath = Path.Combine(logDirectory, logFileName);
                 
                 _instance = new FileLogger(logFilePath);
@@ -103,7 +102,7 @@ public class FileLogger : ILogger
                 return;
 
             var cutoffDate = DateTime.Now.AddDays(-30);
-            var logFiles = Directory.GetFiles(logDirectory, "RevitAddin.Xunit-*.log");
+            var logFiles = Directory.GetFiles(logDirectory, "RevitTestFramework.Common-*.log");
             
             foreach (var logFile in logFiles)
             {
@@ -237,4 +236,16 @@ public class PipeAwareLogger : ILogger
     /// </summary>
     public static PipeAwareLogger ForContext(Type type, StreamWriter? pipeWriter) => 
         new PipeAwareLogger(FileLogger.Instance, pipeWriter, type.Name);
+}
+
+/// <summary>
+/// Represents a log message sent through the pipe
+/// </summary>
+public class PipeLogMessage
+{
+    public string Type { get; set; } = string.Empty;
+    public string Level { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public string Timestamp { get; set; } = string.Empty;
+    public string? Source { get; set; }
 }

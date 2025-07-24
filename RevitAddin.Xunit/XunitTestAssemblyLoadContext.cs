@@ -2,6 +2,7 @@ using System.Runtime.Loader;
 using System.Reflection;
 using Autodesk.Revit.UI;
 using RevitAddin.Common;
+using RevitTestFramework.Common;
 using RevitTestFramework.Contracts;
 
 namespace RevitAddin.Xunit;
@@ -14,7 +15,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
     public string TestDirectory { get; }
     private readonly string _revitAddinDirectory;
     private Assembly? _revitAddinXunitAssembly;
-    private ILogger _logger;
+    private RevitTestFramework.Common.ILogger _logger;
     private StreamWriter? _pipeWriter;
 
     public XunitTestAssemblyLoadContext(string testDirectory) : base("XunitTestContext", isCollectible: false)
@@ -26,7 +27,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
             ?? throw new DirectoryNotFoundException("Could not determine RevitAddin.Xunit directory");
 
         // Start with file logger, will be upgraded to pipe-aware logger if pipe writer is provided
-        _logger = FileLogger.ForContext<XunitTestAssemblyLoadContext>();
+        _logger = RevitTestFramework.Common.FileLogger.ForContext<XunitTestAssemblyLoadContext>();
         
         _logger.LogDebug($"XunitTestAssemblyLoadContext created for test directory: {TestDirectory}");
         _logger.LogDebug($"RevitAddin directory: {_revitAddinDirectory}");
@@ -43,8 +44,28 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
     {
         _pipeWriter = pipeWriter;
         // Upgrade to pipe-aware logger
-        _logger = PipeAwareLogger.ForContext<XunitTestAssemblyLoadContext>(pipeWriter);
+        _logger = RevitTestFramework.Common.PipeAwareLogger.ForContext<XunitTestAssemblyLoadContext>(pipeWriter);
         _logger.LogDebug("Pipe writer configured for log forwarding");
+        
+        // IMPORTANT: Pass the pipe writer to RevitXunitExecutor so it can set up
+        // pipe-aware logging for RevitTestModelHelper in the correct assembly load context
+        // This is done through reflection since we're in different contexts
+        try
+        {
+            var assembly = LoadRevitAddinTestAssembly();
+            var executorType = assembly.GetType("RevitAddin.Xunit.RevitXunitExecutor")
+                ?? throw new InvalidOperationException("Could not find RevitXunitExecutor type");
+
+            var setPipeWriterMethod = executorType.GetMethod("SetPipeWriter", BindingFlags.Public | BindingFlags.Static)
+                ?? throw new InvalidOperationException("Could not find SetPipeWriter method");
+
+            setPipeWriterMethod.Invoke(null, [pipeWriter]);
+            _logger.LogDebug("RevitXunitExecutor.SetPipeWriter called successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to set pipe writer on RevitXunitExecutor");
+        }
     }
 
     /// <summary>
@@ -111,6 +132,9 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
 
             teardownMethod.Invoke(null, null);
             _logger.LogInformation("Revit test infrastructure teardown completed successfully");
+            
+            // Note: RevitTestModelHelper reset is now handled by RevitXunitExecutor.TeardownInfrastructure
+            _logger.LogDebug("RevitTestModelHelper reset is handled by RevitXunitExecutor.TeardownInfrastructure");
         }
         catch (Exception ex)
         {

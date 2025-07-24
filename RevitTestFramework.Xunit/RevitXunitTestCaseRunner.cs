@@ -12,14 +12,12 @@ namespace RevitTestFramework.Xunit;
 public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayName, string skipReason,
     object[] constructorArguments, IMessageBus messageBus,
     ExceptionAggregator aggregator, CancellationTokenSource cancellationTokenSource,
-    string? projectGuid, string? modelGuid, string? localPath) : XunitTestCaseRunner(testCase, displayName, skipReason, constructorArguments, 
+    RevitTestFramework.Common.RevitTestConfiguration configuration) : XunitTestCaseRunner(testCase, displayName, skipReason, constructorArguments, 
            CreateTestMethodArguments(testCase.TestMethod.Method.ToRuntimeMethod()),
            messageBus, aggregator, cancellationTokenSource)
 {
     private readonly ExceptionAggregator _aggregator = aggregator;
-    private readonly string? _projectGuid = projectGuid;
-    private readonly string? _modelGuid = modelGuid;
-    private readonly string? _localPath = localPath;
+    private readonly RevitTestFramework.Common.RevitTestConfiguration _configuration = configuration;
 
     private Document? _document;
     private TransactionGroup? _transactionGroup;
@@ -124,13 +122,13 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
                 {
                     _document = await RevitTestInfrastructure.RevitTask.Run(app =>
                     {
-                        return RevitTestModelHelper.OpenModel(app, _localPath, _projectGuid, _modelGuid);
+                        return RevitTestModelHelper.OpenModel(app, _configuration);
                     });
                     
                     // If no document was opened and all parameters are null, 
                     // this might be a test that doesn't need a document
-                    if (_document == null && string.IsNullOrEmpty(_localPath) && 
-                        string.IsNullOrEmpty(_projectGuid) && string.IsNullOrEmpty(_modelGuid))
+                    if (_document == null && string.IsNullOrEmpty(_configuration.LocalPath) && 
+                        string.IsNullOrEmpty(_configuration.ProjectGuid) && string.IsNullOrEmpty(_configuration.ModelGuid))
                     {
                         Debug.WriteLine($"Test '{methodName}' will run without a specific document (no active document available)");
                     }

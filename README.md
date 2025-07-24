@@ -22,6 +22,7 @@
 - **📝 Version Placeholders** - Dynamic Revit version path resolution
 - **🎯 Multiple Parameter Types** - Inject Document, UIApplication, or both
 - **🐛 Advanced Debugging** - Smart Visual Studio instance detection for seamless debugging experience
+- **🏗️ **Worksharing Support** - Advanced workset and central model management with detailed logging
 
 ## Getting Started
 
@@ -155,6 +156,209 @@ public void TestWithVersionPlaceholder(Document doc)
 }
 ```
 
+## Worksharing and Workset Management
+
+The RevitTestRunner includes comprehensive support for testing workshared models with advanced workset management capabilities.
+
+### DetachOption Parameter
+
+Control how models are detached from central using the `DetachOption` parameter:
+
+```csharp
+// Detach and preserve worksets (recommended for most tests)
+[RevitFact(@"C:\Models\CentralModel.rvt", DetachOption = DetachOption.DetachAndPreserveWorksets)]
+public void TestDetachedModel(Document doc)
+{
+    Assert.False(doc.IsWorkshared, "Document should be detached from central");
+    
+    // Worksets are preserved and can be inspected
+    var worksets = new FilteredWorksetCollector(doc).ToWorksets();
+    Assert.True(worksets.Count > 0, "Worksets should be preserved");
+}
+
+// Detach and discard worksets
+[RevitFact(@"C:\Models\CentralModel.rvt", DetachOption = DetachOption.DetachAndDiscardWorksets)]
+public void TestDetachedModelWithoutWorksets(Document doc)
+{
+    Assert.False(doc.IsWorkshared, "Document should be detached from central");
+    
+    var worksets = new FilteredWorksetCollector(doc).ToWorksets();
+    Assert.True(worksets.Count == 0, "Worksets should be discarded");
+}
+
+// Keep connection to central (default behavior)
+[RevitFact(@"C:\Models\CentralModel.rvt", DetachOption = DetachOption.DoNotDetach)]
+public void TestConnectedModel(Document doc)
+{
+    // Document remains connected to central model
+    // Use with caution - may affect central model
+}
+
+// Create new central from transmitted model
+[RevitFact(@"C:\Models\TransmittedModel.rvt", DetachOption = DetachOption.ClearTransmittedSaveAsNewCentral)]
+public void TestNewCentralFromTransmitted(Document doc)
+{
+    // Creates a new central model from transmitted file
+}
+```
+
+### Available DetachOption Values
+
+| Option | Description | Use Case |
+|--------|-------------|----------|
+| `DoNotDetach` | Keep connection to central | Testing that requires central model connection (use carefully) |
+| `DetachAndPreserveWorksets` | Detach but keep worksets | Most common for testing workset-aware functionality |
+| `DetachAndDiscardWorksets` | Detach and remove worksets | Testing non-workshared functionality on workshared models |
+| `ClearTransmittedSaveAsNewCentral` | Create new central from transmitted | Testing transmitted model workflows |
+
+### WorksetsToOpen Parameter
+
+Control which specific worksets are opened when loading a model:
+
+```csharp
+// Open specific worksets by ID
+[RevitFact(@"C:\Models\WorksharedModel.rvt", WorksetsToOpen = [1, 2, 5])]
+public void TestSpecificWorksets(Document doc)
+{
+    var worksets = new FilteredWorksetCollector(doc).ToWorksets();
+    var openWorksets = worksets.Where(w => w.IsOpen).ToList();
+    
+    // Verify only specified worksets are open
+    var openIds = openWorksets.Select(w => w.Id.IntegerValue).ToList();
+    Assert.Contains(1, openIds);
+    Assert.Contains(2, openIds);
+    Assert.Contains(5, openIds);
+    
+    // Verify other worksets are closed
+    var closedWorksets = worksets.Where(w => !w.IsOpen).ToList();
+    Assert.True(closedWorksets.Count > 0, "Some worksets should be closed");
+}
+
+// Test with single workset
+[RevitFact(@"C:\Models\WorksharedModel.rvt", WorksetsToOpen = [1])]
+public void TestSingleWorkset(Document doc)
+{
+    var worksets = new FilteredWorksetCollector(doc).ToWorksets();
+    var openWorksets = worksets.Where(w => w.IsOpen && w.Kind == WorksetKind.UserWorkset).ToList();
+    
+    Assert.Single(openWorksets, "Only one user workset should be open");
+    Assert.Equal(1, openWorksets.First().Id.IntegerValue);
+}
+```
+
+### Combined Worksharing Options
+
+You can combine `DetachOption` and `WorksetsToOpen` for precise control:
+
+```csharp
+// Detach from central AND open specific worksets
+[RevitFact(@"C:\Models\CentralModel.rvt", 
+           DetachOption = DetachOption.DetachAndPreserveWorksets,
+           WorksetsToOpen = [1, 3, 7])]
+public void TestDetachedWithSpecificWorksets(Document doc)
+{
+    // Document is detached from central
+    Assert.False(doc.IsWorkshared, "Document should be detached");
+    
+    // Only specified worksets are open
+    var worksets = new FilteredWorksetCollector(doc).ToWorksets();
+    var openUserWorksets = worksets
+        .Where(w => w.IsOpen && w.Kind == WorksetKind.UserWorkset)
+        .ToList();
+    
+    var expectedIds = new[] { 1, 3, 7 };
+    var actualIds = openUserWorksets.Select(w => w.Id.IntegerValue).ToArray();
+    
+    Assert.Equal(expectedIds.Length, actualIds.Length);
+    foreach (var expectedId in expectedIds)
+    {
+        Assert.Contains(expectedId, actualIds);
+    }
+}
+
+// Cloud model with workset control
+[RevitFact("project-guid", "model-guid", 
+           DetachOption = DetachOption.DetachAndPreserveWorksets,
+           WorksetsToOpen = [311, 312])]
+public void TestCloudModelWithWorksets(Document doc)
+{
+    Assert.NotNull(doc);
+    Assert.False(doc.IsWorkshared, "Cloud model should be detached");
+    
+    // Verify specific worksets are open
+    var worksets = new FilteredWorksetCollector(doc).ToWorksets();
+    var openWorksetIds = worksets
+        .Where(w => w.IsOpen)
+        .Select(w => w.Id.IntegerValue)
+        .ToList();
+        
+    Assert.Contains(311, openWorksetIds);
+    Assert.Contains(312, openWorksetIds);
+}
+```
+
+### Default Worksharing Behavior
+
+When no worksharing options are specified:
+
+- **DetachOption**: Defaults to `DoNotDetach`
+- **WorksetsToOpen**: Defaults to closing all worksets for better test isolation and performance
+
+```csharp
+// Default behavior - no worksharing options specified
+[RevitFact(@"C:\Models\WorksharedModel.rvt")]
+public void TestDefaultWorksharing(Document doc)
+{
+    // Model remains connected to central (if it was central)
+    // All worksets are closed by default for performance
+    var worksets = new FilteredWorksetCollector(doc).ToWorksets();
+    var openUserWorksets = worksets.Where(w => w.IsOpen && w.Kind == WorksetKind.UserWorkset).ToList();
+    
+    Assert.Empty(openUserWorksets, "User worksets should be closed by default");
+}
+```
+
+### Workset Information Logging
+
+The framework provides comprehensive logging of workset operations:
+
+```
+2024-01-15 14:30:25.123 [INFO] === RevitTestModelHelper.OpenModel - START ===
+2024-01-15 14:30:25.125 [INFO] Configuration: LocalPath=C:\Models\Project.rvt, DetachFromCentral=DetachAndPreserveWorksets
+2024-01-15 14:30:25.127 [INFO] WorksetsToOpen: [1, 2, 5]
+2024-01-15 14:30:25.129 [INFO] Opening local model...
+2024-01-15 14:30:25.131 [INFO] Opening with DetachFromCentralOption: DetachAndPreserveWorksets
+2024-01-15 14:30:25.133 [INFO] Opening local model with 3 specified worksets: [1, 2, 5]
+2024-01-15 14:30:27.245 [INFO] Successfully opened local model: Project
+2024-01-15 14:30:27.247 [INFO] --- Model Information ---
+2024-01-15 14:30:27.249 [INFO] Document Title: Project
+2024-01-15 14:30:27.251 [INFO] Is Workshared: False
+2024-01-15 14:30:27.253 [INFO] --- Workset Information ---
+2024-01-15 14:30:27.255 [INFO] Central Model Path: \\server\central\Project_Central.rvt
+2024-01-15 14:30:27.257 [INFO] Total Worksets: 8
+2024-01-15 14:30:27.259 [INFO] Workset Details:
+2024-01-15 14:30:27.261 [INFO]   ID: 1, Name: 'Architecture', Status: OPEN, EDITABLE, Owner: user1
+2024-01-15 14:30:27.263 [INFO]   ID: 2, Name: 'Structure', Status: OPEN, EDITABLE, Owner: user2
+2024-01-15 14:30:27.265 [INFO]   ID: 5, Name: 'Interiors', Status: OPEN, EDITABLE, Owner: user3
+2024-01-15 14:30:27.267 [INFO]   ID: 3, Name: 'MEP', Status: CLOSED, READ-ONLY, Owner: No Owner
+2024-01-15 14:30:27.269 [INFO] Open Worksets: 3
+2024-01-15 14:30:27.271 [INFO]   Open IDs: [1, 2, 5]
+2024-01-15 14:30:27.273 [INFO]   Open Names: ['Architecture', 'Structure', 'Interiors']
+2024-01-15 14:30:27.275 [INFO] Closed Worksets: 5
+2024-01-15 14:30:27.277 [INFO]   Closed IDs: [3, 4, 6, 7, 8]
+2024-01-15 14:30:27.279 [INFO] === RevitTestModelHelper.OpenModel - END (Success) ===
+```
+
+Log files are stored at: `%LOCALAPPDATA%\RevitTestRunner\Logs\RevitTestFramework.Common-yyyyMMdd.log`
+
+### Best Practices for Worksharing Tests
+
+1. **Use DetachAndPreserveWorksets** for most tests to avoid affecting central models
+2. **Specify WorksetsToOpen** explicitly to ensure consistent test conditions
+3. **Test workset-specific functionality** by opening only relevant worksets
+4. **Use comprehensive assertions** to verify workset states
+5. **Check log files** for detailed workset information during debugging
+
 ## Supported Test Method Parameters
 
 Your test methods can accept the following parameters, and the framework will inject them automatically:
@@ -196,7 +400,7 @@ dotnet build RevitTestRunner.sln
 
 1. **Test Discovery**: The RevitXunitAdapter discovers tests marked with `[RevitFact]` in your test assemblies
 2. **Revit Communication**: When tests run, the adapter communicates with a running Revit instance via named pipes
-3. **Model Loading**: If specified, the appropriate Revit model is opened automatically
+3. **Model Loading**: If specified, the appropriate Revit model is opened automatically with worksharing options
 4. **Debugger Attachment**: If debugging is enabled, automatically attaches to the correct Visual Studio instance
 5. **Test Execution**: Tests run inside the Revit process with full access to the Revit API
 6. **Result Reporting**: Test results are reported back to Visual Studio Test Explorer

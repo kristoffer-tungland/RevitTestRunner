@@ -1,5 +1,6 @@
 using Xunit.Abstractions;
 using Xunit.Sdk;
+using Autodesk.Revit.DB;
 
 namespace RevitTestFramework.Xunit;
 
@@ -14,9 +15,22 @@ public class RevitXunitTestCaseDiscoverer(IMessageSink diagnosticMessageSink) : 
         var projectGuid = factAttribute.GetNamedArgument<string>("ProjectGuid");
         var modelGuid = factAttribute.GetNamedArgument<string>("ModelGuid");
         var localPath = factAttribute.GetNamedArgument<string>("LocalPath");
+        var detachOption = factAttribute.GetNamedArgument<DetachOption>("DetachOption");
+        var worksetsToOpen = factAttribute.GetNamedArgument<int[]>("WorksetsToOpen");
+
+        // Convert from Xunit enum to Revit API enum
+        var revitDetachFromCentral = (Autodesk.Revit.DB.DetachFromCentralOption)(int)detachOption;
+
+        // Create configuration using the Revit API enum type
+        var configuration = new RevitTestFramework.Common.RevitTestConfiguration(
+            projectGuid,
+            modelGuid,
+            localPath,
+            revitDetachFromCentral,
+            worksetsToOpen);
 
         yield return new RevitXunitTestCase(_diagnosticMessageSink,
             discoveryOptions.MethodDisplayOrDefault(), testMethod,
-            projectGuid, modelGuid, localPath);
+            configuration);
     }
 }

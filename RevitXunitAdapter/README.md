@@ -1,4 +1,4 @@
-# RevitXunit.TestAdapter
+﻿# RevitXunit.TestAdapter
 
 **RevitXunit.TestAdapter** is a powerful xUnit test adapter that enables seamless integration testing of Autodesk Revit add-ins directly within the Revit environment.
 
@@ -8,14 +8,15 @@ This test adapter allows you to write standard xUnit tests that automatically lo
 
 ## Features
 
-- ? **Standard xUnit Tests** - Write familiar xUnit tests with `[RevitFact]` attribute
-- ? **Automatic Model Loading** - Load local files, cloud models, or use active documents
-- ? **Full Revit API Access** - Tests run inside Revit with complete API access
-- ? **Visual Studio Integration** - Results appear in Test Explorer with smart debugger support
-- ? **CI/CD Ready** - Works with dotnet test and build pipelines
-- ? **Version Placeholders** - Dynamic Revit version path resolution
-- ? **Multiple Parameter Types** - Inject Document, UIApplication, or both
-- ? **Advanced Debugging** - Intelligent Visual Studio instance detection and management
+- ✅ **Standard xUnit Tests** - Write familiar xUnit tests with `[RevitFact]` attribute
+- ✅ **Automatic Model Loading** - Load local files, cloud models, or use active documents
+- ✅ **Full Revit API Access** - Tests run inside Revit with complete API access
+- ✅ **Visual Studio Integration** - Results appear in Test Explorer with smart debugger support
+- ✅ **CI/CD Ready** - Works with dotnet test and build pipelines
+- ✅ **Version Placeholders** - Dynamic Revit version path resolution
+- ✅ **Multiple Parameter Types** - Inject Document, UIApplication, or both
+- ✅ **Advanced Debugging** - Intelligent Visual Studio instance detection and management
+- ✅ **Worksharing Support** - Advanced workset and central model management
 
 ## Quick Start
 
@@ -89,6 +90,103 @@ public void TestActiveDocument(Document? doc) { }
 public void TestWithVersionPlaceholder(Document doc) { }
 ```
 
+## Worksharing and Workset Management
+
+### DetachOption Parameter
+
+Control how workshared models are handled when opening:
+
+```csharp
+// Detach from central and preserve worksets (recommended for testing)
+[RevitFact(@"C:\Models\CentralModel.rvt", DetachOption = DetachOption.DetachAndPreserveWorksets)]
+public void TestDetachedModel(Document doc)
+{
+    Assert.False(doc.IsWorkshared, "Document should be detached from central");
+    
+    var worksets = new FilteredWorksetCollector(doc).ToWorksets();
+    Assert.True(worksets.Count > 0, "Worksets should be preserved");
+}
+
+// Detach and remove worksharing completely
+[RevitFact(@"C:\Models\CentralModel.rvt", DetachOption = DetachOption.DetachAndDiscardWorksets)]
+public void TestNonWorksharedModel(Document doc)
+{
+    Assert.False(doc.IsWorkshared);
+    
+    var worksets = new FilteredWorksetCollector(doc).ToWorksets();
+    Assert.Empty(worksets, "Worksets should be discarded");
+}
+```
+
+### WorksetsToOpen Parameter
+
+Specify which worksets should be opened:
+
+```csharp
+// Open specific worksets by ID
+[RevitFact(@"C:\Models\WorksharedModel.rvt", WorksetsToOpen = [1, 2, 5])]
+public void TestSpecificWorksets(Document doc)
+{
+    var worksets = new FilteredWorksetCollector(doc).ToWorksets();
+    var openWorksets = worksets.Where(w => w.IsOpen).ToList();
+    
+    // Verify only specified worksets are open
+    var openIds = openWorksets.Select(w => w.Id.IntegerValue).ToArray();
+    Assert.Contains(1, openIds);
+    Assert.Contains(2, openIds);
+    Assert.Contains(5, openIds);
+}
+
+// Combined with DetachOption
+[RevitFact(@"C:\Models\CentralModel.rvt", 
+           DetachOption = DetachOption.DetachAndPreserveWorksets,
+           WorksetsToOpen = [1, 3])]
+public void TestDetachedWithSpecificWorksets(Document doc)
+{
+    Assert.False(doc.IsWorkshared, "Should be detached from central");
+    
+    var openUserWorksets = new FilteredWorksetCollector(doc)
+        .ToWorksets()
+        .Where(w => w.IsOpen && w.Kind == WorksetKind.UserWorkset)
+        .ToList();
+    
+    Assert.Equal(2, openUserWorksets.Count);
+    var openIds = openUserWorksets.Select(w => w.Id.IntegerValue).ToArray();
+    Assert.Contains(1, openIds);
+    Assert.Contains(3, openIds);
+}
+```
+
+### Available DetachOption Values
+
+| Option | Description | Use Case |
+|--------|-------------|----------|
+| `DoNotDetach` (default) | Keep connection to central | Use carefully - may affect central model |
+| `DetachAndPreserveWorksets` | Detach but keep worksets | **Recommended** for most tests |
+| `DetachAndDiscardWorksets` | Detach and remove worksets | Testing non-workshared functionality |
+| `ClearTransmittedSaveAsNewCentral` | Create new central | Testing transmitted model workflows |
+
+### Default Behavior
+
+When no worksharing options are specified:
+- **DetachOption**: `DoNotDetach` (remains connected to central)
+- **WorksetsToOpen**: `null` (all worksets closed for better performance)
+
+### Comprehensive Logging
+
+The framework provides detailed logging of all worksharing operations:
+
+```
+2024-01-15 14:30:25.123 [INFO] === RevitTestModelHelper.OpenModel - START ===
+2024-01-15 14:30:25.125 [INFO] DetachFromCentral: DetachAndPreserveWorksets
+2024-01-15 14:30:25.127 [INFO] WorksetsToOpen: [1, 2, 5]
+2024-01-15 14:30:27.255 [INFO] Total Worksets: 8
+2024-01-15 14:30:27.261 [INFO]   ID: 1, Name: 'Architecture', Status: OPEN, EDITABLE
+2024-01-15 14:30:27.263 [INFO]   ID: 2, Name: 'Structure', Status: OPEN, EDITABLE  
+2024-01-15 14:30:27.265 [INFO]   ID: 5, Name: 'Interiors', Status: OPEN, EDITABLE
+2024-01-15 14:30:27.267 [INFO]   ID: 3, Name: 'MEP', Status: CLOSED, READ-ONLY
+```
+
 ## Supported Test Parameters
 
 Your test methods can accept these parameters (dependency injection):
@@ -152,10 +250,10 @@ The adapter includes a .NET Framework 4.8 helper application that provides:
 
 1. **Discovery** - Finds tests marked with `[RevitFact]`
 2. **Communication** - Connects to running Revit via named pipes
-3. **Model Loading** - Opens specified models automatically
+3. **Model Loading** - Opens specified models automatically with worksharing configuration
 4. **Debugger Setup** - Attaches debugger to correct Visual Studio instance if debugging
 5. **Execution** - Runs tests inside Revit process
-6. **Reporting** - Reports results to Test Explorer/CI
+6. **Reporting** - Reports results to Test Explorer/CI with detailed workset logging
 7. **Cleanup** - Proper debugger detachment and resource cleanup
 
 ## Support

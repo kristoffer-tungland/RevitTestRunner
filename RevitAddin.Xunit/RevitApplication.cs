@@ -11,7 +11,7 @@ public class RevitApplication : IExternalApplication
 {
     private PipeServer? _server;
     private RevitTask? _revitTask;
-    private static readonly ILogger Logger = FileLogger.Instance;
+    private static readonly RevitTestFramework.Common.ILogger Logger = RevitTestFramework.Common.FileLogger.Instance;
 
     public Result OnStartup(UIControlledApplication application)
     {
