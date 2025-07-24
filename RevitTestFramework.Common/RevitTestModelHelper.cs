@@ -232,6 +232,48 @@ public static class RevitTestModelHelper
         }
     }
 
+    /// <summary>
+    /// Creates and configures OpenOptions based on the test configuration
+    /// </summary>
+    /// <param name="configuration">The test configuration containing all option settings</param>
+    /// <param name="modelType">Type of model being opened (for logging purposes)</param>
+    /// <returns>Configured OpenOptions instance</returns>
+    private static OpenOptions CreateOpenOptions(RevitTestConfiguration configuration, string modelType)
+    {
+        var openOptions = new OpenOptions();
+        
+        // Configure DetachFromCentral option
+        openOptions.DetachFromCentralOption = configuration.DetachFromCentral;
+        Logger.LogInformation($"Opening {modelType} with DetachFromCentralOption: {configuration.DetachFromCentral}");
+        
+        // Configure worksets
+        if (configuration.WorksetsToOpen != null && configuration.WorksetsToOpen.Length > 0)
+        {
+            // Create WorksetConfiguration to close all worksets by default, then open specified ones
+            var worksetConfig = new WorksetConfiguration(WorksetConfigurationOption.CloseAllWorksets);
+            
+            // Create list of WorksetId objects from the integer array
+            var worksetIds = configuration.WorksetsToOpen.Select(id => new WorksetId(id)).ToList();
+            
+            // Open the specified worksets
+            worksetConfig.Open(worksetIds);
+            openOptions.SetOpenWorksetsConfiguration(worksetConfig);
+            
+            Logger.LogInformation($"Opening {modelType} with {worksetIds.Count} specified worksets: [{string.Join(", ", configuration.WorksetsToOpen)}]");
+        }
+        else
+        {
+            // Default: open all worksets
+            openOptions.SetOpenWorksetsConfiguration(new WorksetConfiguration(WorksetConfigurationOption.OpenAllWorksets));
+            Logger.LogDebug($"Opening {modelType} with all worksets open (default configuration)");
+        }
+        
+        // Set audit to false (standard for test environments)
+        openOptions.Audit = false;
+        
+        return openOptions;
+    }
+
     private static Document OpenLocalModel(UIApplication uiApp, RevitTestConfiguration configuration)
     {
         try
@@ -256,35 +298,8 @@ public static class RevitTestModelHelper
             var modelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(resolvedPath);
             var app = uiApp.Application;
 
-            var opts = new OpenOptions();
-            
-            // Use the Revit API enum directly (no longer nullable)
-            opts.DetachFromCentralOption = configuration.DetachFromCentral;
-            Logger.LogInformation($"Opening with DetachFromCentralOption: {configuration.DetachFromCentral}");
-
-            // Configure worksets
-            if (configuration.WorksetsToOpen != null && configuration.WorksetsToOpen.Length > 0)
-            {
-                // Create WorksetConfiguration to close all worksets by default, then open specified ones
-                var worksetConfig = new WorksetConfiguration(WorksetConfigurationOption.CloseAllWorksets);
-                
-                // Create list of WorksetId objects from the integer array
-                var worksetIds = configuration.WorksetsToOpen.Select(id => new WorksetId(id)).ToList();
-                
-                // Open the specified worksets
-                worksetConfig.Open(worksetIds);
-                opts.SetOpenWorksetsConfiguration(worksetConfig);
-                
-                Logger.LogInformation($"Opening local model with {worksetIds.Count} specified worksets: [{string.Join(", ", configuration.WorksetsToOpen)}]");
-            }
-            else
-            {
-                // Default: close all worksets
-                opts.SetOpenWorksetsConfiguration(new WorksetConfiguration(WorksetConfigurationOption.CloseAllWorksets));
-                Logger.LogDebug("Opening local model with all worksets closed (default configuration)");
-            }
-            
-            opts.Audit = false;
+            // Create and configure OpenOptions using the common method
+            var opts = CreateOpenOptions(configuration, "local model");
 
             Logger.LogInformation($"Opening local model: {resolvedPath}");
             var doc = app.OpenDocumentFile(modelPath, opts);
@@ -333,34 +348,10 @@ public static class RevitTestModelHelper
             var cloudPath = ModelPathUtils.ConvertCloudGUIDsToCloudPath(revitCloudRegion, projGuid, modGuid);
             var app = uiApp.Application;
 
-            var openOpts = new OpenOptions();
+            // Create and configure OpenOptions using the common method
+            var openOpts = CreateOpenOptions(configuration, "cloud model");
             
-            // Use the Revit API enum directly (no longer nullable)
-            openOpts.DetachFromCentralOption = configuration.DetachFromCentral;
-            Logger.LogInformation($"Opening cloud model with DetachFromCentralOption: {configuration.DetachFromCentral}");
             Logger.LogInformation($"Using cloud region: {configuration.CloudRegion} (Revit: {revitCloudRegion})");
-
-            // Configure worksets
-            if (configuration.WorksetsToOpen != null && configuration.WorksetsToOpen.Length > 0)
-            {
-                // Create WorksetConfiguration to close all worksets by default, then open specified ones
-                var worksetConfig = new WorksetConfiguration(WorksetConfigurationOption.CloseAllWorksets);
-                
-                // Create list of WorksetId objects from the integer array
-                var worksetIds = configuration.WorksetsToOpen.Select(id => new WorksetId(id)).ToList();
-                
-                // Open the specified worksets
-                worksetConfig.Open(worksetIds);
-                openOpts.SetOpenWorksetsConfiguration(worksetConfig);
-                
-                Logger.LogInformation($"Opening cloud model with {worksetIds.Count} specified worksets: [{string.Join(", ", configuration.WorksetsToOpen)}]");
-            }
-            else
-            {
-                // Default: close all worksets
-                openOpts.SetOpenWorksetsConfiguration(new WorksetConfiguration(WorksetConfigurationOption.CloseAllWorksets));
-                Logger.LogDebug("Opening cloud model with all worksets closed (default configuration)");
-            }
 
             Logger.LogInformation($"Opening cloud model: {configuration.ProjectGuid}:{configuration.ModelGuid}");
             var doc = app.OpenDocumentFile(cloudPath, openOpts);

@@ -170,7 +170,7 @@ public void TestDetachedWithSpecificWorksets(Document doc)
 
 When no worksharing options are specified:
 - **DetachOption**: `DoNotDetach` (remains connected to central)
-- **WorksetsToOpen**: `null` (all worksets closed for better performance)
+- **WorksetsToOpen**: `null` (all worksets open for better accessibility)
 
 ### Comprehensive Logging
 

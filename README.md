@@ -302,7 +302,7 @@ public void TestCloudModelWithWorksets(Document doc)
 When no worksharing options are specified:
 
 - **DetachOption**: Defaults to `DoNotDetach`
-- **WorksetsToOpen**: Defaults to closing all worksets for better test isolation and performance
+- **WorksetsToOpen**: Defaults to opening all worksets for better accessibility and usability
 
 ```csharp
 // Default behavior - no worksharing options specified
@@ -310,11 +310,11 @@ When no worksharing options are specified:
 public void TestDefaultWorksharing(Document doc)
 {
     // Model remains connected to central (if it was central)
-    // All worksets are closed by default for performance
+    // All worksets are open by default for better accessibility
     var worksets = new FilteredWorksetCollector(doc).ToWorksets();
     var openUserWorksets = worksets.Where(w => w.IsOpen && w.Kind == WorksetKind.UserWorkset).ToList();
     
-    Assert.Empty(openUserWorksets, "User worksets should be closed by default");
+    Assert.True(openUserWorksets.Count > 0, "User worksets should be open by default");
 }
 ```
 
