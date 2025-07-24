@@ -29,6 +29,22 @@ public enum DetachOption
     ClearTransmittedSaveAsNewCentral = 3
 }
 
+/// <summary>
+/// Enum representing cloud regions for Revit models
+/// </summary>
+public enum CloudRegion
+{
+    /// <summary>
+    /// US region, typically used for North America
+    /// </summary>
+    US = 0,
+
+    /// <summary>
+    /// EMEA region, typically used for Europe, Middle East, and Africa
+    /// </summary>
+    EMEA = 1,
+}
+
 [XunitTestCaseDiscoverer("RevitTestFramework.Xunit.RevitXunitTestCaseDiscoverer", "RevitTestFramework.Xunit")]
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
 public class RevitFactAttribute : FactAttribute
@@ -36,6 +52,7 @@ public class RevitFactAttribute : FactAttribute
     public string? ProjectGuid { get; }
     public string? ModelGuid { get; }
     public string? LocalPath { get; }
+    public CloudRegion CloudRegion { get;}
     
     /// <summary>
     /// Optional property to specify how to detach from central model
@@ -46,6 +63,7 @@ public class RevitFactAttribute : FactAttribute
     /// Optional property to specify which worksets to open (by WorksetId)
     /// </summary>
     public int[]? WorksetsToOpen { get; set; }
+    
 
     public RevitFactAttribute()
     {
@@ -53,10 +71,11 @@ public class RevitFactAttribute : FactAttribute
         // or want to use the currently active model in Revit
     }
 
-    public RevitFactAttribute(string projectGuid, string modelGuid)
+    public RevitFactAttribute(CloudRegion cloudRegion, string projectGuid, string modelGuid)
     {
         ProjectGuid = projectGuid;
         ModelGuid = modelGuid;
+        CloudRegion = cloudRegion;
     }
 
     public RevitFactAttribute(string localPath)

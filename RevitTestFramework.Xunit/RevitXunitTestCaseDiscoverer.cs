@@ -17,17 +17,28 @@ public class RevitXunitTestCaseDiscoverer(IMessageSink diagnosticMessageSink) : 
         var localPath = factAttribute.GetNamedArgument<string>("LocalPath");
         var detachOption = factAttribute.GetNamedArgument<DetachOption>("DetachOption");
         var worksetsToOpen = factAttribute.GetNamedArgument<int[]>("WorksetsToOpen");
+        var cloudRegion = factAttribute.GetNamedArgument<CloudRegion>("CloudRegion");
 
         // Convert from Xunit enum to Revit API enum
         var revitDetachFromCentral = (Autodesk.Revit.DB.DetachFromCentralOption)(int)detachOption;
 
-        // Create configuration using the Revit API enum type
+        // Convert CloudRegion enum to string to avoid dependency in RevitTestConfiguration
+        var cloudRegionString = cloudRegion switch
+        {
+            CloudRegion.US => "US",
+            CloudRegion.EMEA => "EMEA",
+            _ => throw new ArgumentOutOfRangeException(nameof(cloudRegion), 
+                $"Unsupported cloud region: {cloudRegion}. Supported values are US and EMEA.")
+        };
+
+        // Create configuration using the Revit API enum type and string cloud region
         var configuration = new RevitTestFramework.Common.RevitTestConfiguration(
             projectGuid,
             modelGuid,
             localPath,
             revitDetachFromCentral,
-            worksetsToOpen);
+            worksetsToOpen,
+            cloudRegionString);
 
         yield return new RevitXunitTestCase(_diagnosticMessageSink,
             discoveryOptions.MethodDisplayOrDefault(), testMethod,

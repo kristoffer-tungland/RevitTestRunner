@@ -12,7 +12,8 @@ public record RevitTestConfiguration(
     string? ModelGuid = null,
     string? LocalPath = null,
     Autodesk.Revit.DB.DetachFromCentralOption DetachFromCentral = Autodesk.Revit.DB.DetachFromCentralOption.DoNotDetach,
-    int[]? WorksetsToOpen = null);
+    int[]? WorksetsToOpen = null,
+    string? CloudRegion = null);
 
 public static class RevitTestModelHelper
 {
@@ -54,14 +55,6 @@ public static class RevitTestModelHelper
                 return _logger;
             }
         }
-    }
-
-    public static Document? OpenModel(UIApplication uiApp, string? localPath, string? projectGuid, string? modelGuid)
-    {
-        // Create a configuration with the old parameters for backward compatibility
-        var configuration = new RevitTestConfiguration(
-            projectGuid, modelGuid, localPath, Autodesk.Revit.DB.DetachFromCentralOption.DoNotDetach, null);
-        return OpenModel(uiApp, configuration);
     }
 
     public static Document? OpenModel(UIApplication uiApp, RevitTestConfiguration configuration)
@@ -193,7 +186,7 @@ public static class RevitTestModelHelper
                 Logger.LogDebug($"Central Model Path: Could not retrieve ({ex.Message})");
             }
             
-            var worksets = new FilteredWorksetCollector(doc).ToWorksets();
+            var worksets = new FilteredWorksetCollector(doc).WherePasses(new WorksetKindFilter(WorksetKind.UserWorkset)).ToWorksets();
             Logger.LogInformation($"Total Worksets: {worksets.Count}");
 
             if (worksets.Count > 0)
@@ -328,7 +321,16 @@ public static class RevitTestModelHelper
                 throw new ArgumentException($"Invalid model GUID format: '{configuration.ModelGuid}'");
             }
 
-            var cloudPath = ModelPathUtils.ConvertCloudGUIDsToCloudPath(ModelPathUtils.CloudRegionUS, projGuid, modGuid);
+            // Convert CloudRegion string to ModelPathUtils cloud region
+            var revitCloudRegion = configuration.CloudRegion switch
+            {
+                "US" => ModelPathUtils.CloudRegionUS,
+                "EMEA" => ModelPathUtils.CloudRegionEMEA,
+                _ => throw new ArgumentOutOfRangeException(nameof(configuration.CloudRegion), 
+                    $"Unsupported cloud region: {configuration.CloudRegion}. Supported values are 'US' and 'EMEA'.")
+            };
+
+            var cloudPath = ModelPathUtils.ConvertCloudGUIDsToCloudPath(revitCloudRegion, projGuid, modGuid);
             var app = uiApp.Application;
 
             var openOpts = new OpenOptions();
@@ -336,6 +338,7 @@ public static class RevitTestModelHelper
             // Use the Revit API enum directly (no longer nullable)
             openOpts.DetachFromCentralOption = configuration.DetachFromCentral;
             Logger.LogInformation($"Opening cloud model with DetachFromCentralOption: {configuration.DetachFromCentral}");
+            Logger.LogInformation($"Using cloud region: {configuration.CloudRegion} (Revit: {revitCloudRegion})");
 
             // Configure worksets
             if (configuration.WorksetsToOpen != null && configuration.WorksetsToOpen.Length > 0)

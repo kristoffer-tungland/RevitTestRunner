@@ -43,6 +43,7 @@ public class RevitXunitTestCase : XunitTestCase
         data.AddValue("LocalPath", _configuration.LocalPath);
         data.AddValue("DetachOption", _configuration.DetachFromCentral);
         data.AddValue("WorksetsToOpen", _configuration.WorksetsToOpen);
+        data.AddValue("CloudRegion", _configuration.CloudRegion);
     }
 
     public override void Deserialize(IXunitSerializationInfo data)
@@ -53,12 +54,14 @@ public class RevitXunitTestCase : XunitTestCase
         var localPath = data.GetValue<string?>("LocalPath");
         var detachFromCentral = data.GetValue<Autodesk.Revit.DB.DetachFromCentralOption>("DetachOption");
         var worksetsToOpen = data.GetValue<int[]?>("WorksetsToOpen");
+        var cloudRegion = data.GetValue<string>("CloudRegion");
         
         _configuration = new RevitTestFramework.Common.RevitTestConfiguration(
             projectGuid,
             modelGuid,
             localPath,
             detachFromCentral,
-            worksetsToOpen);
+            worksetsToOpen,
+            cloudRegion);
     }
 }
