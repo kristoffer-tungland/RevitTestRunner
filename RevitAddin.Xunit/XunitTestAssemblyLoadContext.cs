@@ -93,7 +93,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
     {
         try
         {
-            _logger.LogInformation("Setting up Revit test infrastructure");
+            _logger.LogDebug("Setting up Revit test infrastructure");
             var assembly = LoadRevitAddinTestAssembly();
             var executorType = assembly.GetType("RevitAddin.Xunit.RevitXunitExecutor")
                 ?? throw new InvalidOperationException("Could not find RevitXunitExecutor type");
@@ -102,7 +102,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
                 ?? throw new InvalidOperationException("Could not find SetupInfrastructure method");
 
             setupMethod.Invoke(null, [app]);
-            _logger.LogInformation("Revit test infrastructure setup completed successfully");
+            _logger.LogDebug("Revit test infrastructure setup completed successfully");
         }
         catch (Exception ex)
         {
@@ -119,7 +119,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
     {
         try
         {
-            _logger.LogInformation("Tearing down Revit test infrastructure");
+            _logger.LogDebug("Tearing down Revit test infrastructure");
             
             if (_revitAddinXunitAssembly == null)
                 throw new InvalidOperationException("RevitAddin.Xunit assembly has not been loaded. Call LoadRevitAddinTestAssembly first.");
@@ -131,7 +131,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
                 ?? throw new InvalidOperationException("Could not find TeardownInfrastructure method");
 
             teardownMethod.Invoke(null, null);
-            _logger.LogInformation("Revit test infrastructure teardown completed successfully");
+            _logger.LogDebug("Revit test infrastructure teardown completed successfully");
             
             // Note: RevitTestModelHelper reset is now handled by RevitXunitExecutor.TeardownInfrastructure
             _logger.LogDebug("RevitTestModelHelper reset is handled by RevitXunitExecutor.TeardownInfrastructure");
@@ -156,7 +156,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
     {
         try
         {
-            _logger.LogInformation($"Starting test execution for assembly: {testAssemblyPath}");
+            _logger.LogDebug($"Starting test execution for assembly: {testAssemblyPath}");
             var methodsStr = command.TestMethods != null ? string.Join(", ", command.TestMethods) : "All";
             _logger.LogDebug($"Test methods: {methodsStr}");
             

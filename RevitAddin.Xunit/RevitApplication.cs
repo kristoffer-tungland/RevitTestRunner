@@ -11,42 +11,42 @@ public class RevitApplication : IExternalApplication
 {
     private PipeServer? _server;
     private RevitTask? _revitTask;
-    private static readonly RevitTestFramework.Common.ILogger Logger = RevitTestFramework.Common.FileLogger.Instance;
+    private static readonly RevitTestFramework.Common.ILogger Logger = RevitTestFramework.Common.FileLogger.ForContext<RevitApplication>();
 
     public Result OnStartup(UIControlledApplication application)
     {
         try
         {
-            Logger.LogInformation("RevitAddin.Xunit startup beginning");
+            Logger.LogInformation("Startup beginning");
             
             // Register assembly resolution handler
             AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
 
             // Log startup info
             string addinLocation = Assembly.GetExecutingAssembly().Location;
-            Logger.LogInformation($"RevitAddin.Xunit starting from: {addinLocation}");
+            Logger.LogInformation($"Starting from: {addinLocation}");
 
             // Extract Revit version from the application
             var revitVersion = application.ControlledApplication.VersionNumber;
-            Logger.LogInformation($"RevitAddin.Xunit detected Revit version: {revitVersion}");
+            Logger.LogInformation($"Detected Revit version: {revitVersion}");
 
             // Use RevitTask to manage UI thread execution
             _revitTask = new RevitTask();
             var pipeName = PipeNaming.GetCurrentProcessPipeName();
-            Logger.LogInformation($"RevitAddin.Xunit using pipe name: {pipeName}");
+            Logger.LogInformation($"Using pipe name: {pipeName}");
             
             _server = new PipeServer(pipeName, _revitTask, path => new XunitTestAssemblyLoadContext(path));
             _server.Start();
             
-            Logger.LogInformation("RevitAddin.Xunit startup completed successfully");
+            Logger.LogInformation("Startup completed successfully");
             return Result.Succeeded;
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "RevitAddin.Xunit startup failed");
+            Logger.LogError(ex, "Startup failed");
             
             // Also log to Trace as fallback
-            Trace.WriteLine($"RevitAddin.Xunit startup failed: {ex.Message}");
+            Trace.WriteLine($"Startup failed: {ex.Message}");
             Trace.WriteLine($"Stack trace: {ex}");
             
             // Clean up any partially initialized resources
@@ -69,7 +69,7 @@ public class RevitApplication : IExternalApplication
     {
         try
         {
-            Logger.LogInformation("RevitAddin.Xunit shutdown starting");
+            Logger.LogInformation("Shutdown starting");
             
             // Unregister assembly resolution handler
             AppDomain.CurrentDomain.AssemblyResolve -= CurrentDomain_AssemblyResolve;
@@ -77,16 +77,16 @@ public class RevitApplication : IExternalApplication
             _server?.Dispose();
             _revitTask?.Dispose();
             
-            Logger.LogInformation("RevitAddin.Xunit shutdown completed successfully");
+            Logger.LogInformation("Shutdown completed successfully");
             
             return Result.Succeeded;
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "RevitAddin.Xunit shutdown failed");
+            Logger.LogError(ex, "Shutdown failed");
             
             // Also log to Trace as fallback
-            Trace.WriteLine($"RevitAddin.Xunit shutdown failed: {ex.Message}");
+            Trace.WriteLine($"Shutdown failed: {ex.Message}");
             Trace.WriteLine($"Stack trace: {ex}");
             
             // Even if shutdown fails, we should return Succeeded to avoid preventing Revit from closing

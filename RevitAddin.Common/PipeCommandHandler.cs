@@ -75,7 +75,7 @@ public class PipeCommandHandler(PipeCommand command, NamedPipeServerStream serve
 
             try
             {
-                logger.LogInformation("Setting up Revit test infrastructure");
+                logger.LogDebug("Setting up Revit test infrastructure");
                 await _revitTask.Run(loadContext.SetupInfrastructure);
                 
                 logger.LogInformation($"Executing tests for assembly: {_testAssemblyPath}");
@@ -97,7 +97,7 @@ public class PipeCommandHandler(PipeCommand command, NamedPipeServerStream serve
             {
                 try
                 {
-                    logger.LogInformation("Tearing down Revit test infrastructure");
+                    logger.LogDebug("Tearing down Revit test infrastructure");
                     // IMPORTANT: Tear down the infrastructure on the UI thread
                     if (loadContext != null)
                     {
@@ -111,7 +111,7 @@ public class PipeCommandHandler(PipeCommand command, NamedPipeServerStream serve
                 }
             }
             
-            logger.LogInformation("Pipe command execution completed");
+            logger.LogDebug("Pipe command execution completed");
         }
         catch (Exception ex)
         {
@@ -203,8 +203,8 @@ public class PipeCommandHandler(PipeCommand command, NamedPipeServerStream serve
             logger.LogFatal(writeEx, $"Failed to write error message to pipe stream. Original exception: {ex}");
             
             // If we can't even write the error, log it
-            System.Diagnostics.Debug.WriteLine($"TestCommandHandler: Failed to write error message: {writeEx}");
-            System.Diagnostics.Debug.WriteLine($"TestCommandHandler: Original exception: {ex}");
+            System.Diagnostics.Debug.WriteLine($"Failed to write error message: {writeEx}");
+            System.Diagnostics.Debug.WriteLine($"Original exception: {ex}");
         }
     }
 }

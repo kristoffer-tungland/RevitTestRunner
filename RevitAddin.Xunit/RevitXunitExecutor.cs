@@ -114,14 +114,12 @@ public static class RevitXunitExecutor
             if (command.Debug)
             {
                 pipeAwareLogger.LogInformation("Debug mode enabled - debugger can now be attached to Revit process");
-                Debug.WriteLine("RevitXunitExecutor: Debug mode enabled - debugger can now be attached to Revit process");
                 
                 // If debugger is not already attached, provide helpful information
                 if (!Debugger.IsAttached)
                 {
                     var processId = Process.GetCurrentProcess().Id;
                     pipeAwareLogger.LogInformation($"To debug tests, attach debugger to Revit.exe process ID: {processId}");
-                    Debug.WriteLine($"RevitXunitExecutor: To debug tests, attach debugger to Revit.exe process ID: {processId}");
                     
                     // Optional: Launch debugger if possible (requires Just-In-Time debugging enabled)
                     try
@@ -129,19 +127,16 @@ public static class RevitXunitExecutor
                         if (Debugger.Launch())
                         {
                             pipeAwareLogger.LogInformation("Debugger launched successfully");
-                            Debug.WriteLine("RevitXunitExecutor: Debugger launched successfully");
                         }
                     }
                     catch (Exception ex)
                     {
                         pipeAwareLogger.LogWarning($"Failed to launch debugger: {ex.Message}");
-                        Debug.WriteLine($"RevitXunitExecutor: Failed to launch debugger: {ex.Message}");
                     }
                 }
                 else
                 {
                     pipeAwareLogger.LogInformation("Debugger is already attached - test debugging enabled");
-                    Debug.WriteLine("RevitXunitExecutor: Debugger is already attached - test debugging enabled");
                 }
             }
 
@@ -207,7 +202,7 @@ public static class RevitXunitExecutor
                 }
             }, cancellationToken);
             
-            pipeAwareLogger.LogInformation("Test execution async operation completed");
+            pipeAwareLogger.LogDebug("Test execution async operation completed");
         }
         catch (Exception ex)
         {
@@ -242,7 +237,7 @@ public static class RevitXunitExecutor
             logger.LogDebug("Failure message written to pipe stream");
             
             // Log the exception for debugging
-            System.Diagnostics.Debug.WriteLine($"RevitXunitExecutor: Test execution failed with exception: {ex}");
+            System.Diagnostics.Debug.WriteLine($"Test execution failed with exception: {ex}");
         }
         catch (ObjectDisposedException)
         {
@@ -259,8 +254,8 @@ public static class RevitXunitExecutor
             logger.LogFatal(writeEx, $"Failed to write error message to pipe stream. Original exception: {ex}");
             
             // If we can't even write the error, log it
-            System.Diagnostics.Debug.WriteLine($"RevitXunitExecutor: Failed to write error message: {writeEx}");
-            System.Diagnostics.Debug.WriteLine($"RevitXunitExecutor: Original exception: {ex}");
+            System.Diagnostics.Debug.WriteLine($"Failed to write error message: {writeEx}");
+            System.Diagnostics.Debug.WriteLine($"Original exception: {ex}");
         }
     }
 }

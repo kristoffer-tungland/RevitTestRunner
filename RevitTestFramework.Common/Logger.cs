@@ -23,12 +23,14 @@ public interface ILogger
 public class FileLogger : ILogger
 {
     private readonly string _logFilePath;
+    private readonly string? _source;
     private readonly object _lockObject = new object();
     private static FileLogger? _instance;
 
-    private FileLogger(string logFilePath)
+    private FileLogger(string logFilePath, string? source = null)
     {
         _logFilePath = logFilePath;
+        _source = source;
         
         // Ensure directory exists
         var directory = Path.GetDirectoryName(_logFilePath);
@@ -78,12 +80,15 @@ public class FileLogger : ILogger
                 var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff zzz");
                 var processId = Environment.ProcessId;
                 var threadId = Environment.CurrentManagedThreadId;
-                var logEntry = $"{timestamp} [{level}] [PID:{processId}] [TID:{threadId}] {message}{Environment.NewLine}";
+                
+                // Include source context if available
+                var sourcePrefix = !string.IsNullOrEmpty(_source) ? $"[{_source}] " : "";
+                var logEntry = $"{timestamp} [{level}] [PID:{processId}] [TID:{threadId}] {sourcePrefix}{message}{Environment.NewLine}";
                 
                 File.AppendAllText(_logFilePath, logEntry);
                 
                 // Also write to Debug output as fallback
-                Debug.WriteLine($"[{level}] {message}");
+                Debug.WriteLine($"[{level}] {sourcePrefix}{message}");
             }
         }
         catch (Exception ex)
@@ -130,12 +135,12 @@ public class FileLogger : ILogger
     /// <summary>
     /// Creates a logger with context (for compatibility with existing code)
     /// </summary>
-    public static ILogger ForContext<T>() => Instance;
+    public static ILogger ForContext<T>() => new FileLogger(Instance._logFilePath, typeof(T).Name);
     
     /// <summary>
     /// Creates a logger with context (for compatibility with existing code)
     /// </summary>
-    public static ILogger ForContext(Type type) => Instance;
+    public static ILogger ForContext(Type type) => new FileLogger(Instance._logFilePath, type.Name);
 }
 
 /// <summary>
