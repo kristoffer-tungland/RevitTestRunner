@@ -112,7 +112,7 @@ public class RevitApplication : IExternalApplication
             string potentialPath = Path.Combine(assemblyDirectory, $"{assemblyName.Name}.dll");
             if (File.Exists(potentialPath))
             {
-                Logger.LogDebug($"Resolved assembly: {assemblyName.Name} from: {potentialPath}");
+                Logger.LogTrace($"Resolved assembly: {assemblyName.Name} from: {potentialPath}");
                 return Assembly.LoadFrom(potentialPath);
             }
 
@@ -120,7 +120,7 @@ public class RevitApplication : IExternalApplication
             string[] candidateFiles = Directory.GetFiles(assemblyDirectory, $"{assemblyName.Name}*.dll");
             if (candidateFiles.Length > 0)
             {
-                Logger.LogDebug($"Resolved assembly: {assemblyName.Name} from: {candidateFiles[0]}");
+                Logger.LogTrace($"Resolved assembly: {assemblyName.Name} from: {candidateFiles[0]}");
                 return Assembly.LoadFrom(candidateFiles[0]);
             }
 
@@ -132,7 +132,7 @@ public class RevitApplication : IExternalApplication
             }
             else
             {
-                Logger.LogDebug($"Assembly resolution delegated to default loader: {assemblyName.Name}");
+                Logger.LogTrace($"Assembly resolution delegated to default loader: {assemblyName.Name}");
             }
             
             return null;

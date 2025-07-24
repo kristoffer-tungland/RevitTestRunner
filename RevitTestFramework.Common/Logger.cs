@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Text.Json;
 
 namespace RevitTestFramework.Common;
@@ -8,6 +9,7 @@ namespace RevitTestFramework.Common;
 /// </summary>
 public interface ILogger
 {
+    void LogTrace(string message);
     void LogDebug(string message);
     void LogInformation(string message);
     void LogWarning(string message);
@@ -26,43 +28,69 @@ public class FileLogger : ILogger
     private readonly string? _source;
     private readonly object _lockObject = new object();
     private static FileLogger? _instance;
+    private static LogLevel? _minLogLevel;
 
     private FileLogger(string logFilePath, string? source = null)
     {
         _logFilePath = logFilePath;
         _source = source;
-        
-        // Ensure directory exists
         var directory = Path.GetDirectoryName(_logFilePath);
         if (!string.IsNullOrEmpty(directory))
         {
             Directory.CreateDirectory(directory);
+            CleanupOldLogFiles(directory);
         }
-
-        // Log initialization
-        WriteLog("INFO", $"Logger initialized. Log file: {_logFilePath}");
-        
-        // Clean up old log files (keep only last 30 days)
-        CleanupOldLogFiles(directory);
+        SetMinLogLevelFromFile(directory);
+        WriteLog("TRACE", $"Logger initialized. Log file: {_logFilePath}");
     }
 
-    public static FileLogger Instance
+    private void SetMinLogLevelFromFile(string? logDirectory)
     {
-        get
+        if (_minLogLevel.HasValue) return;
+        var logLevelFile = logDirectory != null ? Path.Combine(logDirectory, "loglevel.txt") : null;
+        if (logLevelFile != null)
         {
-            if (_instance == null)
+            if (!File.Exists(logLevelFile))
             {
-                var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                var logDirectory = Path.Combine(appDataPath, "RevitTestRunner", "Logs");
-                var logFileName = $"RevitTestFramework.Common-{DateTime.Now:yyyyMMdd}.log";
-                var logFilePath = Path.Combine(logDirectory, logFileName);
-                
-                _instance = new FileLogger(logFilePath);
+                File.WriteAllText(logLevelFile, "Debug");
+                _minLogLevel = LogLevel.Debug;
+                return;
             }
-            return _instance;
+            var text = File.ReadAllText(logLevelFile).Trim();
+            if (Enum.TryParse<LogLevel>(text, true, out var level))
+            {
+                _minLogLevel = level;
+                return;
+            }
+            _minLogLevel = LogLevel.Debug;
+        }
+        else
+        {
+            _minLogLevel = LogLevel.Debug;
         }
     }
 
+    private static int LogLevelToInt(string level)
+    {
+        return level switch
+        {
+            "TRACE" => (int)LogLevel.Trace,
+            "DEBUG" => (int)LogLevel.Debug,
+            "INFO" => (int)LogLevel.Info,
+            "WARN" => (int)LogLevel.Warn,
+            "ERROR" => (int)LogLevel.Error,
+            "FATAL" => (int)LogLevel.Fatal,
+            _ => (int)LogLevel.Debug
+        };
+    }
+
+    private bool ShouldLog(string level)
+    {
+        var minLevel = _minLogLevel ?? LogLevel.Debug;
+        return LogLevelToInt(level) >= (int)minLevel;
+    }
+
+    public void LogTrace(string message) => WriteLog("TRACE", message);
     public void LogDebug(string message) => WriteLog("DEBUG", message);
     public void LogInformation(string message) => WriteLog("INFO", message);
     public void LogWarning(string message) => WriteLog("WARN", message);
@@ -73,6 +101,7 @@ public class FileLogger : ILogger
 
     private void WriteLog(string level, string message)
     {
+        if (!ShouldLog(level)) return;
         try
         {
             lock (_lockObject)
@@ -80,20 +109,14 @@ public class FileLogger : ILogger
                 var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff zzz");
                 var processId = Environment.ProcessId;
                 var threadId = Environment.CurrentManagedThreadId;
-                
-                // Include source context if available
                 var sourcePrefix = !string.IsNullOrEmpty(_source) ? $"[{_source}] " : "";
                 var logEntry = $"{timestamp} [{level}] [PID:{processId}] [TID:{threadId}] {sourcePrefix}{message}{Environment.NewLine}";
-                
                 File.AppendAllText(_logFilePath, logEntry);
-                
-                // Also write to Debug output as fallback
                 Debug.WriteLine($"[{level}] {sourcePrefix}{message}");
             }
         }
         catch (Exception ex)
         {
-            // Fallback to Debug/Trace if file writing fails
             Debug.WriteLine($"Logging failed: {ex.Message}");
             Debug.WriteLine($"Original message: [{level}] {message}");
         }
@@ -105,10 +128,8 @@ public class FileLogger : ILogger
         {
             if (string.IsNullOrEmpty(logDirectory) || !Directory.Exists(logDirectory))
                 return;
-
             var cutoffDate = DateTime.Now.AddDays(-30);
             var logFiles = Directory.GetFiles(logDirectory, "RevitTestFramework.Common-*.log");
-            
             foreach (var logFile in logFiles)
             {
                 var fileInfo = new FileInfo(logFile);
@@ -132,14 +153,23 @@ public class FileLogger : ILogger
         }
     }
 
-    /// <summary>
-    /// Creates a logger with context (for compatibility with existing code)
-    /// </summary>
+    public static FileLogger Instance
+    {
+        get
+        {
+            if (_instance == null)
+            {
+                var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                var logDirectory = Path.Combine(appDataPath, "RevitTestRunner", "Logs");
+                var logFileName = $"RevitTestFramework.Common-{DateTime.Now:yyyyMMdd}.log";
+                var logFilePath = Path.Combine(logDirectory, logFileName);
+                _instance = new FileLogger(logFilePath);
+            }
+            return _instance;
+        }
+    }
+
     public static ILogger ForContext<T>() => new FileLogger(Instance._logFilePath, typeof(T).Name);
-    
-    /// <summary>
-    /// Creates a logger with context (for compatibility with existing code)
-    /// </summary>
     public static ILogger ForContext(Type type) => new FileLogger(Instance._logFilePath, type.Name);
 }
 
@@ -160,6 +190,7 @@ public class PipeAwareLogger : ILogger
         _source = source;
     }
 
+    public void LogTrace(string message) => LogWithLevel("TRACE", message);
     public void LogDebug(string message) => LogWithLevel("DEBUG", message);
     public void LogInformation(string message) => LogWithLevel("INFO", message);
     public void LogWarning(string message) => LogWithLevel("WARN", message);
@@ -170,9 +201,11 @@ public class PipeAwareLogger : ILogger
 
     private void LogWithLevel(string level, string message)
     {
-        // Always log to file first
         switch (level)
         {
+            case "TRACE":
+                _fileLogger.LogTrace(message);
+                break;
             case "DEBUG":
                 _fileLogger.LogDebug(message);
                 break;
@@ -189,21 +222,17 @@ public class PipeAwareLogger : ILogger
                 _fileLogger.LogFatal(message);
                 break;
         }
-
-        // Forward to pipe if available
         ForwardToPipe(level, message);
     }
 
     private void ForwardToPipe(string level, string message)
     {
         if (_pipeWriter == null) return;
-
-        // Don't forward DEBUG level messages through the pipe - keep them file-only
-        if (level.Equals("DEBUG", StringComparison.OrdinalIgnoreCase))
+        // Don't forward TRACE or DEBUG level messages through the pipe - keep them file-only
+        if (level.Equals("TRACE", StringComparison.OrdinalIgnoreCase) || level.Equals("DEBUG", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
-
         try
         {
             lock (_lockObject)
@@ -216,7 +245,6 @@ public class PipeAwareLogger : ILogger
                     Timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff zzz"),
                     Source = _source
                 };
-
                 var json = JsonSerializer.Serialize(logMessage);
                 _pipeWriter.WriteLine(json);
                 _pipeWriter.Flush();
@@ -224,7 +252,6 @@ public class PipeAwareLogger : ILogger
         }
         catch (Exception ex)
         {
-            // If pipe writing fails, fall back to Debug output
             Debug.WriteLine($"Failed to forward log to pipe: {ex.Message}");
             Debug.WriteLine($"Original log message: [{level}] {message}");
         }
@@ -234,13 +261,12 @@ public class PipeAwareLogger : ILogger
     /// Creates a pipe-aware logger with context
     /// </summary>
     public static PipeAwareLogger ForContext<T>(StreamWriter? pipeWriter) => 
-        new PipeAwareLogger(FileLogger.Instance, pipeWriter, typeof(T).Name);
-    
+        new PipeAwareLogger(FileLogger.ForContext<T>(), pipeWriter, typeof(T).Name);
     /// <summary>
     /// Creates a pipe-aware logger with context
     /// </summary>
     public static PipeAwareLogger ForContext(Type type, StreamWriter? pipeWriter) => 
-        new PipeAwareLogger(FileLogger.Instance, pipeWriter, type.Name);
+        new PipeAwareLogger(FileLogger.ForContext(type), pipeWriter, type.Name);
 }
 
 /// <summary>

@@ -28,7 +28,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
 
         // Start with file logger, will be upgraded to pipe-aware logger if pipe writer is provided
         _logger = RevitTestFramework.Common.FileLogger.ForContext<XunitTestAssemblyLoadContext>();
-        
+        _logger.LogTrace($"Logger initialized. Log file: {Path.Combine(_revitAddinDirectory, "Logs", $"RevitTestFramework.Common-{DateTime.Now:yyyyMMdd}.log")}");
         _logger.LogDebug($"XunitTestAssemblyLoadContext created for test directory: {TestDirectory}");
         _logger.LogDebug($"RevitAddin directory: {_revitAddinDirectory}");
 
@@ -200,7 +200,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
             var testDirPath = Path.Combine(TestDirectory, $"{assemblyName.Name}.dll");
             if (File.Exists(testDirPath))
             {
-                _logger.LogDebug($"Resolving assembly: {assemblyName.Name} from test directory: {testDirPath}");
+                _logger.LogTrace($"Resolving assembly: {assemblyName.Name} from test directory: {testDirPath}");
                 return LoadFromAssemblyPath(testDirPath);
             }
 
@@ -208,7 +208,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
             var revitAddinPath = Path.Combine(_revitAddinDirectory, $"{assemblyName.Name}.dll");
             if (File.Exists(revitAddinPath))
             {
-                _logger.LogDebug($"Resolving assembly: {assemblyName.Name} from RevitAddin directory: {revitAddinPath}");
+                _logger.LogTrace($"Resolving assembly: {assemblyName.Name} from RevitAddin directory: {revitAddinPath}");
                 return LoadFromAssemblyPath(revitAddinPath);
             }
 
@@ -217,7 +217,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
             var testDirCandidates = Directory.GetFiles(TestDirectory, testDirPattern);
             if (testDirCandidates.Length > 0)
             {
-                _logger.LogDebug($"Resolving assembly: {assemblyName.Name} from test directory (pattern match): {testDirCandidates[0]}");
+                _logger.LogTrace($"Resolving assembly: {assemblyName.Name} from test directory (pattern match): {testDirCandidates[0]}");
                 return LoadFromAssemblyPath(testDirCandidates[0]);
             }
 
@@ -226,7 +226,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
             var revitAddinCandidates = Directory.GetFiles(_revitAddinDirectory, revitAddinPattern);
             if (revitAddinCandidates.Length > 0)
             {
-                _logger.LogDebug($"Resolving assembly: {assemblyName.Name} from RevitAddin directory (pattern match): {revitAddinCandidates[0]}");
+                _logger.LogTrace($"Resolving assembly: {assemblyName.Name} from RevitAddin directory (pattern match): {revitAddinCandidates[0]}");
                 return LoadFromAssemblyPath(revitAddinCandidates[0]);
             }
 
@@ -238,7 +238,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
             }
             else
             {
-                _logger.LogDebug($"Assembly resolution delegated to default context: {assemblyName.Name}");
+                _logger.LogTrace($"Assembly resolution delegated to default context: {assemblyName.Name}");
             }
             
             return null;

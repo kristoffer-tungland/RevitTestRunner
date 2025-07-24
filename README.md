@@ -351,6 +351,18 @@ The framework provides comprehensive logging of workset operations:
 
 Log files are stored at: `%LOCALAPPDATA%\RevitTestRunner\Logs\RevitTestFramework.Common-yyyyMMdd.log`
 
+## Logging Configuration
+
+The logging level is controlled by the `loglevel.txt` file in the log directory:
+
+```
+C:\Users\{username}\AppData\Local\RevitTestRunner\Logs\loglevel.txt
+```
+
+Set the file content to one of: `Trace`, `Debug`, `Info`, `Warn`, `Error`, or `Fatal` (case-insensitive). If the file does not exist, it will be created automatically with the default value `Debug`.
+
+This allows you to control the verbosity of logs for all Revit test infrastructure and add-in components.
+
 ### Best Practices for Worksharing Tests
 
 1. **Use DetachAndPreserveWorksets** for most tests to avoid affecting central models

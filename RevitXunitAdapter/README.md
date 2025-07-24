@@ -239,6 +239,18 @@ The adapter includes a .NET Framework 4.8 helper application that provides:
 - **Robust Operations** - Reliable attach/detach operations with comprehensive error handling
 - **Process Management** - Independent operation that survives test host lifecycle
 
+## Logging Configuration
+
+The logging level for all Revit test infrastructure and add-in components is controlled by the `loglevel.txt` file in the log directory:
+
+```
+C:\Users\{username}\AppData\Local\RevitTestRunner\Logs\loglevel.txt
+```
+
+Set the file content to one of: `Trace`, `Debug`, `Info`, `Warn`, `Error`, or `Fatal` (case-insensitive). If the file does not exist, it will be created automatically with the default value `Debug`.
+
+This allows you to control the verbosity of logs for all test runs and infrastructure operations.
+
 ## Requirements
 
 - Autodesk Revit 2025+ (or matching package version)
