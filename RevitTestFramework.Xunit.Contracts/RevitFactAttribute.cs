@@ -64,6 +64,11 @@ public class RevitFactAttribute : FactAttribute
     /// </summary>
     public int[]? WorksetsToOpen { get; set; }
     
+    /// <summary>
+    /// Optional property to specify whether to close the model after the test completes.
+    /// This is useful when different tests need to open the same model with different workset configurations.
+    /// </summary>
+    public bool CloseModel { get; set; } = false;
 
     public RevitFactAttribute()
     {

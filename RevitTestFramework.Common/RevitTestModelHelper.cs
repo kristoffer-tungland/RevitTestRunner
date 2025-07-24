@@ -13,7 +13,8 @@ public record RevitTestConfiguration(
     string? LocalPath = null,
     Autodesk.Revit.DB.DetachFromCentralOption DetachFromCentral = Autodesk.Revit.DB.DetachFromCentralOption.DoNotDetach,
     int[]? WorksetsToOpen = null,
-    string? CloudRegion = null);
+    string? CloudRegion = null,
+    bool CloseModel = false);
 
 public static class RevitTestModelHelper
 {
@@ -33,7 +34,6 @@ public static class RevitTestModelHelper
                 _logger = PipeAwareLogger.ForContext(typeof(RevitTestModelHelper), pipeWriter);
                 // Add debug log to confirm pipe-aware logger is set
                 _logger.LogDebug("RevitTestModelHelper: Pipe-aware logger has been configured");
-                _logger.LogInformation("RevitTestModelHelper: Switched to pipe-aware logging for test execution");
             }
             else
             {
@@ -63,6 +63,7 @@ public static class RevitTestModelHelper
         Logger.LogInformation($"Configuration: ProjectGuid={configuration.ProjectGuid}, ModelGuid={configuration.ModelGuid}, LocalPath={configuration.LocalPath}");
         Logger.LogInformation($"DetachFromCentral: {configuration.DetachFromCentral}");
         Logger.LogInformation($"WorksetsToOpen: {(configuration.WorksetsToOpen != null ? $"[{string.Join(", ", configuration.WorksetsToOpen)}]" : "null")}");
+        Logger.LogInformation($"CloseModel: {configuration.CloseModel}");
 
         // If no parameters are provided, return the currently active document
         if (string.IsNullOrEmpty(configuration.LocalPath) && 
@@ -79,7 +80,7 @@ public static class RevitTestModelHelper
             }
             
             Logger.LogInformation($"Using currently active model: {activeDoc.Title}");
-            LogModelInfo(activeDoc);
+            LogModelInfo(activeDoc, configuration);
             Logger.LogInformation("=== RevitTestModelHelper.OpenModel - END (Active Document) ===");
             return activeDoc;
         }
@@ -107,7 +108,7 @@ public static class RevitTestModelHelper
 
             if (doc != null)
             {
-                LogModelInfo(doc);
+                LogModelInfo(doc, configuration);
             }
 
             Logger.LogInformation("=== RevitTestModelHelper.OpenModel - END (Success) ===");
@@ -128,7 +129,7 @@ public static class RevitTestModelHelper
     /// <summary>
     /// Logs detailed information about the opened model, including workset information if workshared
     /// </summary>
-    private static void LogModelInfo(Document doc)
+    private static void LogModelInfo(Document doc, RevitTestConfiguration? configuration = null)
     {
         Logger.LogInformation("--- Model Information ---");
         Logger.LogInformation($"Document Title: {doc.Title}");
@@ -139,7 +140,7 @@ public static class RevitTestModelHelper
 
         if (doc.IsWorkshared)
         {
-            LogWorksetInformation(doc);
+            LogWorksetInformation(doc, configuration);
         }
         else
         {
@@ -152,7 +153,7 @@ public static class RevitTestModelHelper
     /// <summary>
     /// Logs detailed workset information for workshared models
     /// </summary>
-    private static void LogWorksetInformation(Document doc)
+    private static void LogWorksetInformation(Document doc, RevitTestConfiguration? configuration = null)
     {
         try
         {
@@ -221,6 +222,72 @@ public static class RevitTestModelHelper
                 {
                     Logger.LogInformation($"  Closed IDs: [{string.Join(", ", closedWorksets.Select(w => w.Id.IntegerValue))}]");
                     Logger.LogInformation($"  Closed Names: [{string.Join(", ", closedWorksets.Select(w => $"'{w.Name}'"))}]");
+                }
+
+                // Check for expected worksets if configuration is provided and WorksetsToOpen is specified
+                if (configuration?.WorksetsToOpen != null && configuration.WorksetsToOpen.Length > 0)
+                {
+                    Logger.LogInformation("--- Workset Validation ---");
+                    var openWorksetIds = openWorksets.Select(w => w.Id.IntegerValue).ToHashSet();
+                    var expectedWorksetIds = configuration.WorksetsToOpen.ToHashSet();
+                    
+                    var missingWorksets = expectedWorksetIds.Except(openWorksetIds).ToList();
+                    var unexpectedOpenWorksets = openWorksetIds.Except(expectedWorksetIds).ToList();
+                    
+                    if (missingWorksets.Count > 0)
+                    {
+                        // Find workset names for better logging
+                        var missingWorksetDetails = worksets
+                            .Where(w => missingWorksets.Contains(w.Id.IntegerValue))
+                            .Select(w => $"ID: {w.Id.IntegerValue}, Name: '{w.Name}', Status: {(w.IsOpen ? "OPEN" : "CLOSED")}")
+                            .ToList();
+                        
+                        Logger.LogWarning($"Expected worksets not open: {missingWorksets.Count}");
+                        foreach (var detail in missingWorksetDetails)
+                        {
+                            Logger.LogWarning($"  Missing: {detail}");
+                        }
+                        
+                        // Check if any of the missing worksets exist but are closed
+                        var existingButClosed = worksets
+                            .Where(w => missingWorksets.Contains(w.Id.IntegerValue) && !w.IsOpen)
+                            .ToList();
+                        
+                        if (existingButClosed.Count > 0)
+                        {
+                            Logger.LogWarning($"Note: {existingButClosed.Count} of the expected worksets exist but are closed. This may indicate the model was already open or workset configuration was not applied correctly.");
+                        }
+                        
+                        // Check for non-existent worksets
+                        var nonExistentWorksets = missingWorksets
+                            .Where(id => !worksets.Any(w => w.Id.IntegerValue == id))
+                            .ToList();
+                        
+                        if (nonExistentWorksets.Count > 0)
+                        {
+                            Logger.LogWarning($"Worksets that don't exist in model: [{string.Join(", ", nonExistentWorksets)}]");
+                        }
+                    }
+                    else
+                    {
+                        Logger.LogInformation("All expected worksets are open");
+                    }
+                    
+                    if (unexpectedOpenWorksets.Count > 0)
+                    {
+                        var unexpectedDetails = worksets
+                            .Where(w => unexpectedOpenWorksets.Contains(w.Id.IntegerValue))
+                            .Select(w => $"ID: {w.Id.IntegerValue}, Name: '{w.Name}'")
+                            .ToList();
+                        
+                        Logger.LogInformation($"Additional open worksets (not specified in WorksetsToOpen): {unexpectedOpenWorksets.Count}");
+                        foreach (var detail in unexpectedDetails)
+                        {
+                            Logger.LogInformation($"  Unexpected: {detail}");
+                        }
+                    }
+                    
+                    Logger.LogInformation("--- End Workset Validation ---");
                 }
             }
             

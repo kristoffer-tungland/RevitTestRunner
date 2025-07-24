@@ -40,8 +40,13 @@ public static class RevitXunitExecutor
                 
                 // IMPORTANT: Set up pipe-aware logging for RevitTestModelHelper in the correct context
                 RevitTestFramework.Common.RevitTestModelHelper.SetPipeAwareLogger(_currentPipeWriter);
-                _logger.LogInformation("RevitXunitExecutor: Configured pipe-aware logging for test execution");
+                
+                // IMPORTANT: Set up pipe-aware logging for test case runners
+                RevitTestFramework.Xunit.RevitXunitTestCaseRunner.SetPipeAwareLogger(_currentPipeWriter);
+                RevitTestFramework.Xunit.RevitUITestRunner.SetPipeAwareLogger(_currentPipeWriter);
+                
                 _logger.LogDebug("RevitTestModelHelper configured with pipe-aware logger from SetupInfrastructure");
+                _logger.LogDebug("Test case runners configured with pipe-aware logger from SetupInfrastructure");
             }
             
             _logger.LogInformation("Setting up Revit test infrastructure");
@@ -68,7 +73,13 @@ public static class RevitXunitExecutor
             
             // Reset RevitTestModelHelper to file-only logging
             RevitTestFramework.Common.RevitTestModelHelper.SetPipeAwareLogger(null);
+            
+            // Reset test case runners to file-only logging
+            RevitTestFramework.Xunit.RevitXunitTestCaseRunner.SetPipeAwareLogger(null);
+            RevitTestFramework.Xunit.RevitUITestRunner.SetPipeAwareLogger(null);
+            
             _logger.LogDebug("RevitTestModelHelper reset to file-only logging from TeardownInfrastructure");
+            _logger.LogDebug("Test case runners reset to file-only logging from TeardownInfrastructure");
             
             // Reset local pipe writer reference
             _currentPipeWriter = null;

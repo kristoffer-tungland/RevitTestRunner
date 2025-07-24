@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using Autodesk.Revit.DB;
@@ -18,9 +19,46 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
 {
     private readonly ExceptionAggregator _aggregator = aggregator;
     private readonly RevitTestFramework.Common.RevitTestConfiguration _configuration = configuration;
+    private static RevitTestFramework.Common.ILogger _logger = RevitTestFramework.Common.FileLogger.ForContext(typeof(RevitXunitTestCaseRunner));
+    private static readonly object _loggerLock = new object();
 
     private Document? _document;
     private TransactionGroup? _transactionGroup;
+
+    /// <summary>
+    /// Sets a pipe-aware logger for test execution
+    /// </summary>
+    /// <param name="pipeWriter">The pipe writer to use for forwarding logs</param>
+    public static void SetPipeAwareLogger(StreamWriter? pipeWriter)
+    {
+        lock (_loggerLock)
+        {
+            if (pipeWriter != null)
+            {
+                _logger = RevitTestFramework.Common.PipeAwareLogger.ForContext(typeof(RevitXunitTestCaseRunner), pipeWriter);
+                _logger.LogDebug("RevitXunitTestCaseRunner: Pipe-aware logger has been configured");
+            }
+            else
+            {
+                _logger = RevitTestFramework.Common.FileLogger.ForContext(typeof(RevitXunitTestCaseRunner));
+                _logger.LogDebug("RevitXunitTestCaseRunner: Reset to file-only logging");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the current logger (thread-safe)
+    /// </summary>
+    private static RevitTestFramework.Common.ILogger Logger
+    {
+        get
+        {
+            lock (_loggerLock)
+            {
+                return _logger;
+            }
+        }
+    }
 
     /// <summary>
     /// Creates test method arguments with the correct values for the base constructor.
@@ -85,6 +123,40 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
         return args;
     }
 
+    /// <summary>
+    /// Checks if the test method requires a Document parameter (Document or Document?)
+    /// </summary>
+    /// <param name="testMethod">The test method to analyze</param>
+    /// <returns>True if the method has a Document or Document? parameter, false otherwise</returns>
+    private static bool DoesTestMethodRequireDocument(MethodInfo testMethod)
+    {
+        var parameters = testMethod.GetParameters();
+        
+        foreach (var parameter in parameters)
+        {
+            var paramType = parameter.ParameterType;
+            
+            // Check for Document parameter
+            if (paramType == typeof(Document))
+            {
+                Logger.LogDebug($"Found Document parameter '{parameter.Name}' in test method '{testMethod.Name}'");
+                return true;
+            }
+            
+            // Check for nullable Document parameter (Document?)
+            if (paramType.IsGenericType && 
+                paramType.GetGenericTypeDefinition() == typeof(Nullable<>) && 
+                Nullable.GetUnderlyingType(paramType) == typeof(Document))
+            {
+                Logger.LogDebug($"Found nullable Document parameter '{parameter.Name}' in test method '{testMethod.Name}'");
+                return true;
+            }
+        }
+        
+        Logger.LogDebug($"No Document parameters found in test method '{testMethod.Name}' - parameters: [{string.Join(", ", parameters.Select(p => $"{p.ParameterType.Name} {p.Name}"))}]");
+        return false;
+    }
+
     protected override async Task<RunSummary> RunTestAsync()
     {
         // Run the test on a background thread to avoid blocking Revit UI
@@ -96,8 +168,6 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
             // Check if we're in debug mode - if debugger is attached, add a breakpoint opportunity
             if (Debugger.IsAttached)
             {
-                Debug.WriteLine($"RevitXunitTestCaseRunner: Running test '{className}.{methodName}' in debug mode");
-                
                 // Only break if this is explicitly a debug test or if environment variable is set
                 var forceBreak = Environment.GetEnvironmentVariable("REVIT_TEST_BREAK_ON_ALL") == "true";
                 var isDebugTest = methodName.Contains("Debug", StringComparison.OrdinalIgnoreCase) || 
@@ -105,38 +175,52 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
                 
                 if (forceBreak || isDebugTest)
                 {
-                    Debug.WriteLine($"RevitXunitTestCaseRunner: Breaking for test '{methodName}' (ForceBreak={forceBreak}, IsDebugTest={isDebugTest})");
+                    Logger.LogDebug($"Breaking for test '{methodName}' (ForceBreak={forceBreak}, IsDebugTest={isDebugTest})");
                     // This line serves as a potential breakpoint location for debugging test setup
                     Debugger.Break(); // This will pause execution if a debugger is attached
                 }
                 else
                 {
-                    Debug.WriteLine($"RevitXunitTestCaseRunner: Skipping break for test '{methodName}' (set REVIT_TEST_BREAK_ON_ALL=true to break on all tests)");
+                    Logger.LogDebug($"Skipping break for test '{methodName}' (set REVIT_TEST_BREAK_ON_ALL=true to break on all tests)");
                 }
             }
+
+            // Check if the test method actually requires a Document parameter
+            var testMethod = TestCase.TestMethod.Method.ToRuntimeMethod();
+            var requiresDocument = DoesTestMethodRequireDocument(testMethod);
+            
+            Logger.LogDebug($"Test '{methodName}' requires document: {requiresDocument}");
                         
             try
             {
-                // Request model setup on UI thread and wait for completion
-                try
+                // Only attempt to open model if the test method requires a Document parameter
+                if (requiresDocument)
                 {
-                    _document = await RevitTestInfrastructure.RevitTask.Run(app =>
+                    // Request model setup on UI thread and wait for completion
+                    try
                     {
-                        return RevitTestModelHelper.OpenModel(app, _configuration);
-                    });
-                    
-                    // If no document was opened and all parameters are null, 
-                    // this might be a test that doesn't need a document
-                    if (_document == null && string.IsNullOrEmpty(_configuration.LocalPath) && 
-                        string.IsNullOrEmpty(_configuration.ProjectGuid) && string.IsNullOrEmpty(_configuration.ModelGuid))
+                        _document = await RevitTestInfrastructure.RevitTask.Run(app =>
+                        {
+                            return RevitTestModelHelper.OpenModel(app, _configuration);
+                        });
+                        
+                        // If no document was opened and all parameters are null, 
+                        // this might be a test that doesn't need a document
+                        if (_document == null && string.IsNullOrEmpty(_configuration.LocalPath) && 
+                            string.IsNullOrEmpty(_configuration.ProjectGuid) && string.IsNullOrEmpty(_configuration.ModelGuid))
+                        {
+                            Logger.LogDebug($"Test '{methodName}' will run without a specific document (no active document available)");
+                        }
+                    }
+                    catch (Exception ex)
                     {
-                        Debug.WriteLine($"Test '{methodName}' will run without a specific document (no active document available)");
+                        var unwrappedException = UnwrapException(ex);
+                        throw new InvalidOperationException($"Model setup failed for test '{methodName}': {unwrappedException.Message}", unwrappedException);
                     }
                 }
-                catch (Exception ex)
+                else
                 {
-                    var unwrappedException = UnwrapException(ex);
-                    throw new InvalidOperationException($"Model setup failed for test '{methodName}': {unwrappedException.Message}", unwrappedException);
+                    Logger.LogDebug($"Skipping model opening for test '{methodName}' - no Document parameter required");
                 }
 
                 // Only create transaction group if we have a document
@@ -159,14 +243,6 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
                     }
                 }
 
-                // Add debug information before running the actual test
-                if (Debugger.IsAttached)
-                {
-                    Debug.WriteLine($"RevitXunitTestCaseRunner: About to execute test method '{methodName}'");
-                    Debug.WriteLine($"RevitXunitTestCaseRunner: Document available: {_document != null}");
-                    Debug.WriteLine($"RevitXunitTestCaseRunner: Transaction group active: {_transactionGroup != null}");
-                }
-
                 // Now run the test with the prepared document
                 return await base.RunTestAsync();
             }
@@ -174,7 +250,7 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
             {
                 // Handle any exceptions that occur during test setup or execution
                 var unwrappedException = UnwrapException(ex);
-                Debug.WriteLine($"Error running test {methodName}: {unwrappedException.Message}");
+                Logger.LogError(unwrappedException, $"Error running test {methodName}");
                 
                 // Add the unwrapped exception to the aggregator for proper reporting
                 _aggregator.Add(unwrappedException);
@@ -184,6 +260,9 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
             }
             finally
             {
+                // Store reference to document for potential closing before cleaning up _document field
+                var documentToClose = _document;
+                
                 // Clean up on UI thread
                 _document = null;
                 await RevitTestInfrastructure.RevitTask.Run(app =>
@@ -198,18 +277,34 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
                         catch (Exception ex)
                         {
                             var unwrappedException = UnwrapException(ex);
-                            Debug.WriteLine($"Error rolling back transaction group: {unwrappedException.Message}");
+                            Logger.LogError(unwrappedException, "Error rolling back transaction group");
                         }
                         finally
                         {
                             _transactionGroup.Dispose();
                         }
                     }
+                    
+                    // Close the model if CloseModel flag is set
+                    if (_configuration.CloseModel && documentToClose != null)
+                    {
+                        try
+                        {
+                            Logger.LogInformation($"Closing model '{documentToClose.Title}' as requested by CloseModel flag");
+                            documentToClose.Close(false); // Close without saving
+                        }
+                        catch (Exception ex)
+                        {
+                            var unwrappedException = UnwrapException(ex);
+                            Logger.LogError(unwrappedException, "Error closing model");
+                            // Don't throw here - this is cleanup, and we don't want to mask test results
+                        }
+                    }
                 });
                 
                 if (Debugger.IsAttached)
                 {
-                    Debug.WriteLine($"RevitXunitTestCaseRunner: Completed test '{methodName}' cleanup");
+                    Logger.LogDebug($"Completed test '{methodName}' cleanup");
                 }
             }
         });
@@ -306,6 +401,44 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
     CancellationTokenSource cancellationTokenSource) : XunitTestRunner(test, messageBus, testClass, constructorArguments, testMethod, testMethodArguments,
            skipReason, beforeAfterAttributes, aggregator, cancellationTokenSource)
 {
+    private static RevitTestFramework.Common.ILogger _logger = RevitTestFramework.Common.FileLogger.ForContext(typeof(RevitUITestRunner));
+    private static readonly object _loggerLock = new object();
+
+    /// <summary>
+    /// Sets a pipe-aware logger for test execution
+    /// </summary>
+    /// <param name="pipeWriter">The pipe writer to use for forwarding logs</param>
+    public static void SetPipeAwareLogger(StreamWriter? pipeWriter)
+    {
+        lock (_loggerLock)
+        {
+            if (pipeWriter != null)
+            {
+                _logger = RevitTestFramework.Common.PipeAwareLogger.ForContext(typeof(RevitUITestRunner), pipeWriter);
+                _logger.LogDebug("RevitUITestRunner: Pipe-aware logger has been configured");
+            }
+            else
+            {
+                _logger = RevitTestFramework.Common.FileLogger.ForContext(typeof(RevitUITestRunner));
+                _logger.LogDebug("RevitUITestRunner: Reset to file-only logging");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the current logger (thread-safe)
+    /// </summary>
+    private static RevitTestFramework.Common.ILogger Logger
+    {
+        get
+        {
+            lock (_loggerLock)
+            {
+                return _logger;
+            }
+        }
+    }
+
     protected override async Task<decimal> InvokeTestMethodAsync(ExceptionAggregator aggregator)
     {        
         try
@@ -322,9 +455,9 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
                     // Debug support: Add breakpoint opportunity when debugger is attached
                     if (Debugger.IsAttached)
                     {
-                        Debug.WriteLine($"RevitUITestRunner: About to invoke test method '{TestMethod.Name}' on UI thread");
-                        Debug.WriteLine($"RevitUITestRunner: Test class: {TestClass.Name}");
-                        Debug.WriteLine($"RevitUITestRunner: Arguments count: {TestMethodArguments.Length}");
+                        Logger.LogDebug($"About to invoke test method '{TestMethod.Name}' on UI thread");
+                        Logger.LogDebug($"Test class: {TestClass.Name}");
+                        Logger.LogDebug($"Arguments count: {TestMethodArguments.Length}");
                         
                         // This serves as a breakpoint location for debugging the actual test method execution
                         if (TestMethod.Name.Contains("Debug", StringComparison.OrdinalIgnoreCase) || 
@@ -348,11 +481,6 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
 
                     timer.Stop();
                     
-                    if (Debugger.IsAttached)
-                    {
-                        Debug.WriteLine($"RevitUITestRunner: Test method '{TestMethod.Name}' completed successfully in {timer.ElapsedMilliseconds}ms");
-                    }
-                    
                     return timer.ElapsedMilliseconds;
                 }
                 catch (Exception ex)
@@ -360,11 +488,6 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
                     timer.Stop();
                     // Unwrap TargetInvocationException to get the actual test exception
                     exception = UnwrapException(ex);
-                    
-                    if (Debugger.IsAttached)
-                    {
-                        Debug.WriteLine($"RevitUITestRunner: Test method '{TestMethod.Name}' failed with exception: {exception.Message}");
-                    }
                     
                     return timer.ElapsedMilliseconds;
                 }
