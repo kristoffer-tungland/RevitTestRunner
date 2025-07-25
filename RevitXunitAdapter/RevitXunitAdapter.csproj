@@ -15,7 +15,7 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>RevitXunit.TestAdapter</PackageId>
-    <PackageVersion>$(RevitVersion).0.0</PackageVersion>
+    <PackageVersion>$(Version)</PackageVersion>
     <Title>Revit XUnit Test Adapter</Title>
     <Description>Test adapter for running XUnit tests in Autodesk Revit. Enables seamless integration testing of Revit add-ins with automatic model loading, full API access, and Visual Studio Test Explorer integration.</Description>
     <Authors>Kristoffer Tungland</Authors>

@@ -180,6 +180,21 @@ You can use the log output to debug test setup, extract workset IDs, and verify 
 
 ## Example: Worksharing Test
 
+```csharp
+[RevitFact(@".\Project1.rvt", WorksetsToOpen = [0], DetachOption = DetachOption.DetachAndPreserveWorksets, CloseModel = true)]
+public void DetachAndPreserveWorksets_ShouldDetachModelAndPreserveWorksets(Document document)
+{
+    Assert.NotNull(document);
+    Assert.Equal("Project1_detached", document.Title);
+    var userWorksets = new FilteredWorksetCollector(document)
+        .OfKind(WorksetKind.UserWorkset)
+        .ToWorksets();
+    Assert.NotEmpty(userWorksets);
+    var openWorksets = userWorksets.Where(w => w.IsOpen).ToList();
+    Assert.Single(openWorksets);
+}
+```
+
 When working with workshared models, you may need to specify workset IDs to open. You can extract the available workset IDs from the test output logs. Look for log lines like these in the test output:
 
 ```
@@ -198,21 +213,6 @@ Use these IDs in your test attribute:
 public void OpenSpecificWorksets(Document document)
 {
     // ...test code...
-}
-```
-
-```csharp
-[RevitFact(@".\Project1.rvt", WorksetsToOpen = [0], DetachOption = DetachOption.DetachAndPreserveWorksets, CloseModel = true)]
-public void DetachAndPreserveWorksets_ShouldDetachModelAndPreserveWorksets(Document document)
-{
-    Assert.NotNull(document);
-    Assert.Equal("Project1_detached", document.Title);
-    var userWorksets = new FilteredWorksetCollector(document)
-        .OfKind(WorksetKind.UserWorkset)
-        .ToWorksets();
-    Assert.NotEmpty(userWorksets);
-    var openWorksets = userWorksets.Where(w => w.IsOpen).ToList();
-    Assert.Single(openWorksets);
 }
 ```
 
