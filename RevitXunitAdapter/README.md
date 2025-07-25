@@ -32,6 +32,20 @@ Or use this example test project file:
 
 ---
 
+## Key Features
+
+- **🔧 Standard xUnit Tests** - Write familiar xUnit tests with `[RevitFact]` attribute
+- **📁 Automatic Model Loading** - Load local files, cloud models, or use active documents
+- **🔌 Full Revit API Access** - Tests run inside Revit with complete API access
+- **🔍 Visual Studio Integration** - Results appear in Test Explorer with intelligent debugger support
+- **🚀 CI/CD Ready** - Works with dotnet test and build pipelines
+- **📝 Version Placeholders** - Dynamic Revit version path resolution
+- **🎯 Multiple Parameter Types** - Inject Document, UIApplication, or both
+- **🐛 Advanced Debugging** - Smart Visual Studio instance detection for seamless debugging experience
+- **🏗️ Worksharing Support** - Advanced workset and central model management with detailed logging
+
+---
+
 ## How Test Discovery and Execution Works
 
 After installing the NuGet package:
