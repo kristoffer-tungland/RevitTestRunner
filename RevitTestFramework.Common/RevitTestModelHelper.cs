@@ -57,7 +57,7 @@ public static class RevitTestModelHelper
         }
     }
 
-    public static Document? OpenModel(UIApplication uiApp, RevitTestConfiguration configuration)
+    public static Document? OpenModel(UIApplication uiApp, RevitTestConfiguration configuration, string? testAssemblyDirectory)
     {
         Logger.LogInformation("=== RevitTestModelHelper.OpenModel - START ===");
         Logger.LogInformation($"Configuration: ProjectGuid={configuration.ProjectGuid}, ModelGuid={configuration.ModelGuid}, LocalPath={configuration.LocalPath}");
@@ -98,7 +98,7 @@ public static class RevitTestModelHelper
             if (!string.IsNullOrEmpty(configuration.LocalPath))
             {
                 Logger.LogInformation("Opening local model...");
-                doc = OpenLocalModel(uiApp, configuration);
+                doc = OpenLocalModel(uiApp, configuration, testAssemblyDirectory);
             }
             else
             {
@@ -301,8 +301,7 @@ public static class RevitTestModelHelper
 
     /// <summary>
     /// Creates and configures OpenOptions based on the test configuration
-    /// </summary>
-    /// <param name="configuration">The test configuration containing all option settings</param>
+    /// /// <param name="configuration">The test configuration containing all option settings</param>
     /// <param name="modelType">Type of model being opened (for logging purposes)</param>
     /// <returns>Configured OpenOptions instance</returns>
     private static OpenOptions CreateOpenOptions(RevitTestConfiguration configuration, string modelType)
@@ -341,14 +340,17 @@ public static class RevitTestModelHelper
         return openOptions;
     }
 
-    private static Document OpenLocalModel(UIApplication uiApp, RevitTestConfiguration configuration)
+    private static Document OpenLocalModel(UIApplication uiApp, RevitTestConfiguration configuration, string? testAssemblyDirectory = null)
     {
         try
         {
             var primaryVersionNumber = uiApp.Application.VersionNumber;
             
-            // Replace [RevitVersion] placeholder with actual version number
-            var resolvedPath = configuration.LocalPath!.Replace("[RevitVersion]", primaryVersionNumber);
+            // Replace {RevitVersion} placeholder with actual version number
+            var resolvedPath = configuration.LocalPath!.Replace("{RevitVersion}", primaryVersionNumber);
+
+            // Expand environment variables and special folders, using testAssemblyDirectory for relative paths
+            resolvedPath = ResolveSpecialFolders(resolvedPath, testAssemblyDirectory);
             
             Logger.LogDebug($"Original path: {configuration.LocalPath}");
             if (resolvedPath != configuration.LocalPath)
@@ -437,5 +439,35 @@ public static class RevitTestModelHelper
             Logger.LogError(ex, $"Failed to open cloud model '{configuration.ProjectGuid}:{configuration.ModelGuid}'");
             throw new InvalidOperationException($"Failed to open cloud model '{configuration.ProjectGuid}:{configuration.ModelGuid}': {ex.Message}", ex);
         }
+    }
+
+    /// <summary>
+    /// Resolves special folders, environment variables, and relative paths in a file path string
+    /// Supports tokens like {Documents}, {Desktop}, {AppData}, {LocalAppData}, {UserProfile},
+    /// environment variables like %USERPROFILE%, %APPDATA%, etc., and relative paths (./, ../)
+    /// relative to the provided base directory (usually the test assembly directory).
+    /// </summary>
+    private static string ResolveSpecialFolders(string path, string? baseDirectory = null)
+    {
+        if (string.IsNullOrEmpty(path)) return path;
+
+        // Expand environment variables (e.g., %USERPROFILE%)
+        var expanded = Environment.ExpandEnvironmentVariables(path);
+
+        // Replace known folder tokens
+        expanded = expanded.Replace("{Documents}", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
+        expanded = expanded.Replace("{Desktop}", Environment.GetFolderPath(Environment.SpecialFolder.Desktop));
+        expanded = expanded.Replace("{AppData}", Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData));
+        expanded = expanded.Replace("{LocalAppData}", Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+        expanded = expanded.Replace("{UserProfile}", Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+
+        // Handle relative paths (./, ../) relative to the provided base directory
+        if (!Path.IsPathRooted(expanded))
+        {
+            var baseDir = baseDirectory ?? string.Empty;
+            expanded = Path.GetFullPath(Path.Combine(baseDir, expanded));
+        }
+
+        return expanded;
     }
 }

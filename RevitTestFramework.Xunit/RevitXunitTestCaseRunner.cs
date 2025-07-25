@@ -199,9 +199,12 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
                     // Request model setup on UI thread and wait for completion
                     try
                     {
+                        // Get the test assembly directory for relative path resolution
+                        var testAssemblyDirectory = Path.GetDirectoryName(RevitTestInfrastructure.ActiveCommand.TestAssembly);
+
                         _document = await RevitTestInfrastructure.RevitTask.Run(app =>
                         {
-                            return RevitTestModelHelper.OpenModel(app, _configuration);
+                            return RevitTestModelHelper.OpenModel(app, _configuration, testAssemblyDirectory);
                         });
                         
                         // If no document was opened and all parameters are null, 

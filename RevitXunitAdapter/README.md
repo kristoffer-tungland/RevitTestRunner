@@ -86,7 +86,7 @@ public void TestActiveDocument(Document? doc) { }
 
 ### Version Placeholder Support
 ```csharp
-[RevitFact(@"C:\Program Files\Autodesk\Revit [RevitVersion]\Samples\sample.rvt")]
+[RevitFact(@"C:\Program Files\Autodesk\Revit {RevitVersion}\Samples\sample.rvt")]
 public void TestWithVersionPlaceholder(Document doc) { }
 ```
 

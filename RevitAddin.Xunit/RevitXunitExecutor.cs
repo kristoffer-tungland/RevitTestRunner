@@ -107,6 +107,8 @@ public static class RevitXunitExecutor
             var command = JsonSerializer.Deserialize<PipeCommand>(commandJson)
                 ?? throw new InvalidOperationException("Failed to deserialize PipeCommand");
 
+            RevitTestInfrastructure.SetActiveCommand(command);
+
             var methodsStr = command.TestMethods != null ? string.Join(", ", command.TestMethods) : "All";
             pipeAwareLogger.LogDebug($"Test execution command - Debug: {command.Debug}, Methods: {methodsStr}");
 
@@ -140,6 +142,7 @@ public static class RevitXunitExecutor
                 }
             }
 
+            
             RevitTestInfrastructure.CancellationToken = cancellationToken;
             var methods = command.TestMethods;
 

@@ -149,10 +149,10 @@ public void TestWithCloudModel(Document doc)
 ### 4. Version Placeholder
 
 ```csharp
-[RevitFact(@"C:\Program Files\Autodesk\Revit [RevitVersion]\Samples\sample.rvt")]
+[RevitFact(@"C:\Program Files\Autodesk\Revit {RevitVersion}\Samples\sample.rvt")]
 public void TestWithVersionPlaceholder(Document doc)
 {
-    // [RevitVersion] is replaced with actual Revit version at runtime
+    // {RevitVersion} is replaced with actual Revit version at runtime
 }
 ```
 
