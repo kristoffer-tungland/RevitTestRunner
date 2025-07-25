@@ -12,17 +12,18 @@ public class PipeServer(string pipeName, RevitTask revitTask, Func<string, ITest
     private readonly Func<string, ITestAssemblyLoadContext> _createLoadContext = createLoadContext ?? throw new ArgumentNullException(nameof(createLoadContext));
     private readonly CancellationTokenSource _cts = new();
     private Task? _listenerTask;
-    private static readonly ILogger Logger = FileLogger.ForContext<PipeServer>();
+    private static readonly RevitTestFramework.Common.ILogger Logger = RevitTestFramework.Common.FileLogger.ForContext<PipeServer>();
 
     public void Start()
     {
+        Logger.LogTrace($"Logger initialized. Log file: PipeServer");
         Logger.LogInformation($"Starting pipe server with pipe name: {_pipeName}");
         _listenerTask = Task.Run(ListenAsync);
     }
 
     private async Task ListenAsync()
     {
-        Logger.LogInformation("Pipe server listening for connections");
+        Logger.LogTrace("Pipe server listening for connections");
         
         while (!_cts.IsCancellationRequested)
         {
@@ -35,9 +36,9 @@ public class PipeServer(string pipeName, RevitTask revitTask, Func<string, ITest
                     PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous);
 
-                Logger.LogDebug($"Waiting for client connection on pipe: {_pipeName}");
+                Logger.LogTrace($"Waiting for client connection on pipe: {_pipeName}");
                 await server.WaitForConnectionAsync(_cts.Token).ConfigureAwait(false);
-                Logger.LogInformation("Client connected to pipe server");
+                Logger.LogTrace("Client connected to pipe server");
 
                 using var reader = new StreamReader(server, leaveOpen: true);
                 while (server.IsConnected && !_cts.IsCancellationRequested)
@@ -65,7 +66,7 @@ public class PipeServer(string pipeName, RevitTask revitTask, Func<string, ITest
                     }
                 }
                 
-                Logger.LogInformation("Client disconnected from pipe server");
+                Logger.LogTrace("Client disconnected from pipe server");
             }
             catch (OperationCanceledException)
             {
@@ -79,7 +80,7 @@ public class PipeServer(string pipeName, RevitTask revitTask, Func<string, ITest
             }
         }
         
-        Logger.LogInformation("Pipe server listener stopped");
+        Logger.LogTrace("Pipe server listener stopped");
     }
 
     /// <summary>

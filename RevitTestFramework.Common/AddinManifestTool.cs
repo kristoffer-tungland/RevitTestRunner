@@ -48,7 +48,7 @@ public static class AddinManifestTool
         RevitAddInManifestGenerator.GenerateAddinManifest(
             outputDirectory,
             versionedAssemblyPath,
-            "RevitApplication",
+            "RevitXunitTestFrameworkApplication",
             "RevitTestFramework",
             addinName,
             versionSpecificGuid,

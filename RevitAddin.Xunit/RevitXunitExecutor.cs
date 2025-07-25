@@ -12,7 +12,18 @@ namespace RevitAddin.Xunit;
 
 public static class RevitXunitExecutor
 {
-    private static ILogger _logger = FileLogger.ForContext(typeof(RevitXunitExecutor));
+    private static RevitTestFramework.Common.ILogger _logger = RevitTestFramework.Common.FileLogger.ForContext(typeof(RevitXunitExecutor));
+    private static StreamWriter? _currentPipeWriter;
+
+    /// <summary>
+    /// Sets the pipe writer for the current test execution session
+    /// This allows SetupInfrastructure to configure pipe-aware logging for RevitTestModelHelper
+    /// </summary>
+    /// <param name="pipeWriter">The pipe writer to use for log forwarding</param>
+    public static void SetPipeWriter(StreamWriter? pipeWriter)
+    {
+        _currentPipeWriter = pipeWriter;
+    }
 
     /// <summary>
     /// Sets up the required Revit API infrastructure (ExternalEvents, etc.).
@@ -22,6 +33,22 @@ public static class RevitXunitExecutor
     {
         try
         {
+            // Configure pipe-aware logging if a pipe writer is available
+            if (_currentPipeWriter != null)
+            {
+                _logger = RevitTestFramework.Common.PipeAwareLogger.ForContext(typeof(RevitXunitExecutor), _currentPipeWriter);
+                
+                // IMPORTANT: Set up pipe-aware logging for RevitTestModelHelper in the correct context
+                RevitTestFramework.Common.RevitTestModelHelper.SetPipeAwareLogger(_currentPipeWriter);
+                
+                // IMPORTANT: Set up pipe-aware logging for test case runners
+                RevitTestFramework.Xunit.RevitXunitTestCaseRunner.SetPipeAwareLogger(_currentPipeWriter);
+                RevitTestFramework.Xunit.RevitUITestRunner.SetPipeAwareLogger(_currentPipeWriter);
+                
+                _logger.LogDebug("RevitTestModelHelper configured with pipe-aware logger from SetupInfrastructure");
+                _logger.LogDebug("Test case runners configured with pipe-aware logger from SetupInfrastructure");
+            }
+            
             _logger.LogInformation("Setting up Revit test infrastructure");
             RevitTestInfrastructure.Setup(uiApp);
             _logger.LogInformation("Revit test infrastructure setup completed");
@@ -43,6 +70,21 @@ public static class RevitXunitExecutor
         {
             _logger.LogInformation("Tearing down Revit test infrastructure");
             RevitTestInfrastructure.Dispose();
+            
+            // Reset RevitTestModelHelper to file-only logging
+            RevitTestFramework.Common.RevitTestModelHelper.SetPipeAwareLogger(null);
+            
+            // Reset test case runners to file-only logging
+            RevitTestFramework.Xunit.RevitXunitTestCaseRunner.SetPipeAwareLogger(null);
+            RevitTestFramework.Xunit.RevitUITestRunner.SetPipeAwareLogger(null);
+            
+            _logger.LogDebug("RevitTestModelHelper reset to file-only logging from TeardownInfrastructure");
+            _logger.LogDebug("Test case runners reset to file-only logging from TeardownInfrastructure");
+            
+            // Reset local pipe writer reference
+            _currentPipeWriter = null;
+            _logger = RevitTestFramework.Common.FileLogger.ForContext(typeof(RevitXunitExecutor));
+            
             _logger.LogInformation("Revit test infrastructure teardown completed");
         }
         catch (Exception ex)
@@ -55,7 +97,7 @@ public static class RevitXunitExecutor
     public static async Task ExecuteTestsInRevitAsync(string commandJson, string testAssemblyPath, StreamWriter writer, CancellationToken cancellationToken)
     {
         // Upgrade to pipe-aware logger for this execution
-        var pipeAwareLogger = PipeAwareLogger.ForContext(typeof(RevitXunitExecutor), writer);
+        var pipeAwareLogger = RevitTestFramework.Common.PipeAwareLogger.ForContext(typeof(RevitXunitExecutor), writer);
         
         try
         {
@@ -65,6 +107,8 @@ public static class RevitXunitExecutor
             var command = JsonSerializer.Deserialize<PipeCommand>(commandJson)
                 ?? throw new InvalidOperationException("Failed to deserialize PipeCommand");
 
+            RevitTestInfrastructure.SetActiveCommand(command);
+
             var methodsStr = command.TestMethods != null ? string.Join(", ", command.TestMethods) : "All";
             pipeAwareLogger.LogDebug($"Test execution command - Debug: {command.Debug}, Methods: {methodsStr}");
 
@@ -72,14 +116,12 @@ public static class RevitXunitExecutor
             if (command.Debug)
             {
                 pipeAwareLogger.LogInformation("Debug mode enabled - debugger can now be attached to Revit process");
-                Debug.WriteLine("RevitXunitExecutor: Debug mode enabled - debugger can now be attached to Revit process");
                 
                 // If debugger is not already attached, provide helpful information
                 if (!Debugger.IsAttached)
                 {
                     var processId = Process.GetCurrentProcess().Id;
                     pipeAwareLogger.LogInformation($"To debug tests, attach debugger to Revit.exe process ID: {processId}");
-                    Debug.WriteLine($"RevitXunitExecutor: To debug tests, attach debugger to Revit.exe process ID: {processId}");
                     
                     // Optional: Launch debugger if possible (requires Just-In-Time debugging enabled)
                     try
@@ -87,22 +129,20 @@ public static class RevitXunitExecutor
                         if (Debugger.Launch())
                         {
                             pipeAwareLogger.LogInformation("Debugger launched successfully");
-                            Debug.WriteLine("RevitXunitExecutor: Debugger launched successfully");
                         }
                     }
                     catch (Exception ex)
                     {
                         pipeAwareLogger.LogWarning($"Failed to launch debugger: {ex.Message}");
-                        Debug.WriteLine($"RevitXunitExecutor: Failed to launch debugger: {ex.Message}");
                     }
                 }
                 else
                 {
                     pipeAwareLogger.LogInformation("Debugger is already attached - test debugging enabled");
-                    Debug.WriteLine("RevitXunitExecutor: Debugger is already attached - test debugging enabled");
                 }
             }
 
+            
             RevitTestInfrastructure.CancellationToken = cancellationToken;
             var methods = command.TestMethods;
 
@@ -165,7 +205,7 @@ public static class RevitXunitExecutor
                 }
             }, cancellationToken);
             
-            pipeAwareLogger.LogInformation("Test execution async operation completed");
+            pipeAwareLogger.LogDebug("Test execution async operation completed");
         }
         catch (Exception ex)
         {
@@ -174,7 +214,7 @@ public static class RevitXunitExecutor
         }
     }
 
-    private static void HandleTestExecutionException(Exception ex, string[]? methods, StreamWriter writer, ILogger logger)
+    private static void HandleTestExecutionException(Exception ex, string[]? methods, StreamWriter writer, RevitTestFramework.Common.ILogger logger)
     {
         var methodsStr = methods != null ? string.Join(", ", methods) : "None";
         logger.LogError(ex, $"Handling test execution exception for methods: {methodsStr}");
@@ -200,7 +240,7 @@ public static class RevitXunitExecutor
             logger.LogDebug("Failure message written to pipe stream");
             
             // Log the exception for debugging
-            System.Diagnostics.Debug.WriteLine($"RevitXunitExecutor: Test execution failed with exception: {ex}");
+            System.Diagnostics.Debug.WriteLine($"Test execution failed with exception: {ex}");
         }
         catch (ObjectDisposedException)
         {
@@ -217,17 +257,17 @@ public static class RevitXunitExecutor
             logger.LogFatal(writeEx, $"Failed to write error message to pipe stream. Original exception: {ex}");
             
             // If we can't even write the error, log it
-            System.Diagnostics.Debug.WriteLine($"RevitXunitExecutor: Failed to write error message: {writeEx}");
-            System.Diagnostics.Debug.WriteLine($"RevitXunitExecutor: Original exception: {ex}");
+            System.Diagnostics.Debug.WriteLine($"Failed to write error message: {writeEx}");
+            System.Diagnostics.Debug.WriteLine($"Original exception: {ex}");
         }
     }
 }
 
 // Clean xUnit integration without reflection
-internal class StreamingXmlTestExecutionVisitor(StreamWriter writer, XElement assemblyElement, Func<bool> cancelThunk, ILogger? logger = null) : XmlTestExecutionVisitor(assemblyElement, cancelThunk)
+internal class StreamingXmlTestExecutionVisitor(StreamWriter writer, XElement assemblyElement, Func<bool> cancelThunk, RevitTestFramework.Common.ILogger? logger = null) : XmlTestExecutionVisitor(assemblyElement, cancelThunk)
 {
     private readonly StreamWriter _writer = writer;
-    private readonly ILogger _logger = logger ?? FileLogger.ForContext<StreamingXmlTestExecutionVisitor>();
+    private readonly RevitTestFramework.Common.ILogger _logger = logger ?? RevitTestFramework.Common.FileLogger.ForContext<StreamingXmlTestExecutionVisitor>();
 
     private void Send(PipeTestResultMessage msg)
     {

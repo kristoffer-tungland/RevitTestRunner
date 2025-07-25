@@ -2,6 +2,7 @@ using System.Runtime.Loader;
 using System.Reflection;
 using Autodesk.Revit.UI;
 using RevitAddin.Common;
+using RevitTestFramework.Common;
 using RevitTestFramework.Contracts;
 
 namespace RevitAddin.Xunit;
@@ -14,7 +15,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
     public string TestDirectory { get; }
     private readonly string _revitAddinDirectory;
     private Assembly? _revitAddinXunitAssembly;
-    private ILogger _logger;
+    private RevitTestFramework.Common.ILogger _logger;
     private StreamWriter? _pipeWriter;
 
     public XunitTestAssemblyLoadContext(string testDirectory) : base("XunitTestContext", isCollectible: false)
@@ -26,8 +27,8 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
             ?? throw new DirectoryNotFoundException("Could not determine RevitAddin.Xunit directory");
 
         // Start with file logger, will be upgraded to pipe-aware logger if pipe writer is provided
-        _logger = FileLogger.ForContext<XunitTestAssemblyLoadContext>();
-        
+        _logger = RevitTestFramework.Common.FileLogger.ForContext<XunitTestAssemblyLoadContext>();
+        _logger.LogTrace($"Logger initialized. Log file: {Path.Combine(_revitAddinDirectory, "Logs", $"RevitTestFramework.Common-{DateTime.Now:yyyyMMdd}.log")}");
         _logger.LogDebug($"XunitTestAssemblyLoadContext created for test directory: {TestDirectory}");
         _logger.LogDebug($"RevitAddin directory: {_revitAddinDirectory}");
 
@@ -43,8 +44,28 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
     {
         _pipeWriter = pipeWriter;
         // Upgrade to pipe-aware logger
-        _logger = PipeAwareLogger.ForContext<XunitTestAssemblyLoadContext>(pipeWriter);
+        _logger = RevitTestFramework.Common.PipeAwareLogger.ForContext<XunitTestAssemblyLoadContext>(pipeWriter);
         _logger.LogDebug("Pipe writer configured for log forwarding");
+        
+        // IMPORTANT: Pass the pipe writer to RevitXunitExecutor so it can set up
+        // pipe-aware logging for RevitTestModelHelper in the correct assembly load context
+        // This is done through reflection since we're in different contexts
+        try
+        {
+            var assembly = LoadRevitAddinTestAssembly();
+            var executorType = assembly.GetType("RevitAddin.Xunit.RevitXunitExecutor")
+                ?? throw new InvalidOperationException("Could not find RevitXunitExecutor type");
+
+            var setPipeWriterMethod = executorType.GetMethod("SetPipeWriter", BindingFlags.Public | BindingFlags.Static)
+                ?? throw new InvalidOperationException("Could not find SetPipeWriter method");
+
+            setPipeWriterMethod.Invoke(null, [pipeWriter]);
+            _logger.LogDebug("RevitXunitExecutor.SetPipeWriter called successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to set pipe writer on RevitXunitExecutor");
+        }
     }
 
     /// <summary>
@@ -72,7 +93,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
     {
         try
         {
-            _logger.LogInformation("Setting up Revit test infrastructure");
+            _logger.LogDebug("Setting up Revit test infrastructure");
             var assembly = LoadRevitAddinTestAssembly();
             var executorType = assembly.GetType("RevitAddin.Xunit.RevitXunitExecutor")
                 ?? throw new InvalidOperationException("Could not find RevitXunitExecutor type");
@@ -81,7 +102,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
                 ?? throw new InvalidOperationException("Could not find SetupInfrastructure method");
 
             setupMethod.Invoke(null, [app]);
-            _logger.LogInformation("Revit test infrastructure setup completed successfully");
+            _logger.LogDebug("Revit test infrastructure setup completed successfully");
         }
         catch (Exception ex)
         {
@@ -98,7 +119,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
     {
         try
         {
-            _logger.LogInformation("Tearing down Revit test infrastructure");
+            _logger.LogDebug("Tearing down Revit test infrastructure");
             
             if (_revitAddinXunitAssembly == null)
                 throw new InvalidOperationException("RevitAddin.Xunit assembly has not been loaded. Call LoadRevitAddinTestAssembly first.");
@@ -110,7 +131,10 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
                 ?? throw new InvalidOperationException("Could not find TeardownInfrastructure method");
 
             teardownMethod.Invoke(null, null);
-            _logger.LogInformation("Revit test infrastructure teardown completed successfully");
+            _logger.LogDebug("Revit test infrastructure teardown completed successfully");
+            
+            // Note: RevitTestModelHelper reset is now handled by RevitXunitExecutor.TeardownInfrastructure
+            _logger.LogDebug("RevitTestModelHelper reset is handled by RevitXunitExecutor.TeardownInfrastructure");
         }
         catch (Exception ex)
         {
@@ -132,7 +156,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
     {
         try
         {
-            _logger.LogInformation($"Starting test execution for assembly: {testAssemblyPath}");
+            _logger.LogDebug($"Starting test execution for assembly: {testAssemblyPath}");
             var methodsStr = command.TestMethods != null ? string.Join(", ", command.TestMethods) : "All";
             _logger.LogDebug($"Test methods: {methodsStr}");
             
@@ -176,7 +200,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
             var testDirPath = Path.Combine(TestDirectory, $"{assemblyName.Name}.dll");
             if (File.Exists(testDirPath))
             {
-                _logger.LogDebug($"Resolving assembly: {assemblyName.Name} from test directory: {testDirPath}");
+                _logger.LogTrace($"Resolving assembly: {assemblyName.Name} from test directory: {testDirPath}");
                 return LoadFromAssemblyPath(testDirPath);
             }
 
@@ -184,7 +208,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
             var revitAddinPath = Path.Combine(_revitAddinDirectory, $"{assemblyName.Name}.dll");
             if (File.Exists(revitAddinPath))
             {
-                _logger.LogDebug($"Resolving assembly: {assemblyName.Name} from RevitAddin directory: {revitAddinPath}");
+                _logger.LogTrace($"Resolving assembly: {assemblyName.Name} from RevitAddin directory: {revitAddinPath}");
                 return LoadFromAssemblyPath(revitAddinPath);
             }
 
@@ -193,7 +217,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
             var testDirCandidates = Directory.GetFiles(TestDirectory, testDirPattern);
             if (testDirCandidates.Length > 0)
             {
-                _logger.LogDebug($"Resolving assembly: {assemblyName.Name} from test directory (pattern match): {testDirCandidates[0]}");
+                _logger.LogTrace($"Resolving assembly: {assemblyName.Name} from test directory (pattern match): {testDirCandidates[0]}");
                 return LoadFromAssemblyPath(testDirCandidates[0]);
             }
 
@@ -202,7 +226,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
             var revitAddinCandidates = Directory.GetFiles(_revitAddinDirectory, revitAddinPattern);
             if (revitAddinCandidates.Length > 0)
             {
-                _logger.LogDebug($"Resolving assembly: {assemblyName.Name} from RevitAddin directory (pattern match): {revitAddinCandidates[0]}");
+                _logger.LogTrace($"Resolving assembly: {assemblyName.Name} from RevitAddin directory (pattern match): {revitAddinCandidates[0]}");
                 return LoadFromAssemblyPath(revitAddinCandidates[0]);
             }
 
@@ -214,7 +238,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
             }
             else
             {
-                _logger.LogDebug($"Assembly resolution delegated to default context: {assemblyName.Name}");
+                _logger.LogTrace($"Assembly resolution delegated to default context: {assemblyName.Name}");
             }
             
             return null;

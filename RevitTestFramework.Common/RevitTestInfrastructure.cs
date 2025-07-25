@@ -1,4 +1,5 @@
 using Autodesk.Revit.UI;
+using RevitTestFramework.Contracts;
 
 namespace RevitTestFramework.Common;
 
@@ -10,12 +11,15 @@ public static class RevitTestInfrastructure
 {
     private static RevitTask? _revitTask;
     private static UIApplication? _uiApplication;
+    private static PipeCommand? _command;
 
     public static RevitTask RevitTask { get => _revitTask ?? throw new InvalidOperationException("RevitTask is not initialized. Call Setup first."); }
     
     public static UIApplication UIApplication { get => _uiApplication ?? throw new InvalidOperationException("UIApplication is not initialized. Call Setup first."); }
 
     public static CancellationToken? CancellationToken { get; set; }
+
+    public static PipeCommand ActiveCommand { get => _command ?? throw new InvalidOperationException("ActiveCommand is not set. Call SetActiveCommand first."); }
 
     public static void Setup(UIApplication uiApp)
     {
@@ -28,5 +32,10 @@ public static class RevitTestInfrastructure
         _revitTask?.Dispose();
         _uiApplication = null;
         CancellationToken = null;
+    }
+
+    public static void SetActiveCommand(PipeCommand command)
+    {
+        _command = command;
     }
 }
