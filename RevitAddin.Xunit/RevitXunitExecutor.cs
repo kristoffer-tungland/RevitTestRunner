@@ -12,7 +12,7 @@ namespace RevitAddin.Xunit;
 
 public static class RevitXunitExecutor
 {
-    private static RevitTestFramework.Common.ILogger _logger = RevitTestFramework.Common.FileLogger.ForContext(typeof(RevitXunitExecutor));
+    private static ILogger _logger = FileLogger.ForContext(typeof(RevitXunitExecutor));
     private static StreamWriter? _currentPipeWriter;
 
     /// <summary>
@@ -36,10 +36,10 @@ public static class RevitXunitExecutor
             // Configure pipe-aware logging if a pipe writer is available
             if (_currentPipeWriter != null)
             {
-                _logger = RevitTestFramework.Common.PipeAwareLogger.ForContext(typeof(RevitXunitExecutor), _currentPipeWriter);
-                
+                _logger = PipeAwareLogger.ForContext(typeof(RevitXunitExecutor), _currentPipeWriter);
+
                 // IMPORTANT: Set up pipe-aware logging for RevitTestModelHelper in the correct context
-                RevitTestFramework.Common.RevitTestModelHelper.SetPipeAwareLogger(_currentPipeWriter);
+                RevitTestModelHelper.SetPipeAwareLogger(_currentPipeWriter);
                 
                 // IMPORTANT: Set up pipe-aware logging for test case runners
                 RevitTestFramework.Xunit.RevitXunitTestCaseRunner.SetPipeAwareLogger(_currentPipeWriter);
@@ -70,9 +70,9 @@ public static class RevitXunitExecutor
         {
             _logger.LogInformation("Tearing down Revit test infrastructure");
             RevitTestInfrastructure.Dispose();
-            
+
             // Reset RevitTestModelHelper to file-only logging
-            RevitTestFramework.Common.RevitTestModelHelper.SetPipeAwareLogger(null);
+            RevitTestModelHelper.SetPipeAwareLogger(null);
             
             // Reset test case runners to file-only logging
             RevitTestFramework.Xunit.RevitXunitTestCaseRunner.SetPipeAwareLogger(null);
@@ -83,7 +83,7 @@ public static class RevitXunitExecutor
             
             // Reset local pipe writer reference
             _currentPipeWriter = null;
-            _logger = RevitTestFramework.Common.FileLogger.ForContext(typeof(RevitXunitExecutor));
+            _logger = FileLogger.ForContext(typeof(RevitXunitExecutor));
             
             _logger.LogInformation("Revit test infrastructure teardown completed");
         }
@@ -97,7 +97,7 @@ public static class RevitXunitExecutor
     public static async Task ExecuteTestsInRevitAsync(string commandJson, string testAssemblyPath, StreamWriter writer, CancellationToken cancellationToken)
     {
         // Upgrade to pipe-aware logger for this execution
-        var pipeAwareLogger = RevitTestFramework.Common.PipeAwareLogger.ForContext(typeof(RevitXunitExecutor), writer);
+        var pipeAwareLogger = PipeAwareLogger.ForContext(typeof(RevitXunitExecutor), writer);
         
         try
         {
@@ -214,7 +214,7 @@ public static class RevitXunitExecutor
         }
     }
 
-    private static void HandleTestExecutionException(Exception ex, string[]? methods, StreamWriter writer, RevitTestFramework.Common.ILogger logger)
+    private static void HandleTestExecutionException(Exception ex, string[]? methods, StreamWriter writer, ILogger logger)
     {
         var methodsStr = methods != null ? string.Join(", ", methods) : "None";
         logger.LogError(ex, $"Handling test execution exception for methods: {methodsStr}");
@@ -238,9 +238,9 @@ public static class RevitXunitExecutor
             writer.Flush();
 
             logger.LogDebug("Failure message written to pipe stream");
-            
+
             // Log the exception for debugging
-            System.Diagnostics.Debug.WriteLine($"Test execution failed with exception: {ex}");
+            Debug.WriteLine($"Test execution failed with exception: {ex}");
         }
         catch (ObjectDisposedException)
         {
@@ -255,19 +255,19 @@ public static class RevitXunitExecutor
         catch (Exception writeEx)
         {
             logger.LogFatal(writeEx, $"Failed to write error message to pipe stream. Original exception: {ex}");
-            
+
             // If we can't even write the error, log it
-            System.Diagnostics.Debug.WriteLine($"Failed to write error message: {writeEx}");
-            System.Diagnostics.Debug.WriteLine($"Original exception: {ex}");
+            Debug.WriteLine($"Failed to write error message: {writeEx}");
+            Debug.WriteLine($"Original exception: {ex}");
         }
     }
 }
 
 // Clean xUnit integration without reflection
-internal class StreamingXmlTestExecutionVisitor(StreamWriter writer, XElement assemblyElement, Func<bool> cancelThunk, RevitTestFramework.Common.ILogger? logger = null) : XmlTestExecutionVisitor(assemblyElement, cancelThunk)
+internal class StreamingXmlTestExecutionVisitor(StreamWriter writer, XElement assemblyElement, Func<bool> cancelThunk, ILogger? logger = null) : XmlTestExecutionVisitor(assemblyElement, cancelThunk)
 {
     private readonly StreamWriter _writer = writer;
-    private readonly RevitTestFramework.Common.ILogger _logger = logger ?? RevitTestFramework.Common.FileLogger.ForContext<StreamingXmlTestExecutionVisitor>();
+    private readonly ILogger _logger = logger ?? FileLogger.ForContext<StreamingXmlTestExecutionVisitor>();
 
     private void Send(PipeTestResultMessage msg)
     {

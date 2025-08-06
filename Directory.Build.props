@@ -23,7 +23,7 @@
     <Nullable>enable</Nullable>
     
     <!-- Default target framework is net8.0 -->
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework> 
     
     <!-- Set ProjectName if not set -->
     <ProjectName Condition="'$(ProjectName)' == ''">$(MSBuildProjectName)</ProjectName>
