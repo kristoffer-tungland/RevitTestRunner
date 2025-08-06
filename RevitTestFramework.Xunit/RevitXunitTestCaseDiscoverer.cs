@@ -21,7 +21,7 @@ public class RevitXunitTestCaseDiscoverer(IMessageSink diagnosticMessageSink) : 
         var closeModel = factAttribute.GetNamedArgument<bool>("CloseModel");
 
         // Convert from Xunit enum to Revit API enum
-        var revitDetachFromCentral = (Autodesk.Revit.DB.DetachFromCentralOption)(int)detachOption;
+        var revitDetachFromCentral = (DetachFromCentralOption)(int)detachOption;
 
         // Convert CloudRegion enum to string to avoid dependency in RevitTestConfiguration
         var cloudRegionString = cloudRegion switch
@@ -33,7 +33,7 @@ public class RevitXunitTestCaseDiscoverer(IMessageSink diagnosticMessageSink) : 
         };
 
         // Create configuration using the Revit API enum type and string cloud region
-        var configuration = new RevitTestFramework.Common.RevitTestConfiguration(
+        var configuration = new Common.RevitTestConfiguration(
             projectGuid,
             modelGuid,
             localPath,

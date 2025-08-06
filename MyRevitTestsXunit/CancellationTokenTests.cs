@@ -12,7 +12,7 @@ public class CancellationTokenTests
     /// Verifies that the cancellation token can be passed and used within a Revit context.
     /// </summary>
     /// <param name="cancellationToken">The cancellation token to be tested.</param>
-    [RevitFact]
+    [RevitFact(Timeout = 300)]
     public void CancellationToken_ShouldBePassedAndUsed(CancellationToken cancellationToken)
     {
         Assert.False(cancellationToken.IsCancellationRequested, "Cancellation token should not be cancelled at this point.");

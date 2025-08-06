@@ -12,7 +12,7 @@ public class PipeServer(string pipeName, RevitTask revitTask, Func<string, ITest
     private readonly Func<string, ITestAssemblyLoadContext> _createLoadContext = createLoadContext ?? throw new ArgumentNullException(nameof(createLoadContext));
     private readonly CancellationTokenSource _cts = new();
     private Task? _listenerTask;
-    private static readonly RevitTestFramework.Common.ILogger Logger = RevitTestFramework.Common.FileLogger.ForContext<PipeServer>();
+    private static readonly ILogger Logger = FileLogger.ForContext<PipeServer>();
 
     public void Start()
     {

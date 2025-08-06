@@ -13,13 +13,13 @@ namespace RevitTestFramework.Xunit;
 public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayName, string skipReason,
     object[] constructorArguments, IMessageBus messageBus,
     ExceptionAggregator aggregator, CancellationTokenSource cancellationTokenSource,
-    RevitTestFramework.Common.RevitTestConfiguration configuration) : XunitTestCaseRunner(testCase, displayName, skipReason, constructorArguments, 
+    RevitTestConfiguration configuration) : XunitTestCaseRunner(testCase, displayName, skipReason, constructorArguments, 
            CreateTestMethodArguments(testCase.TestMethod.Method.ToRuntimeMethod()),
            messageBus, aggregator, cancellationTokenSource)
 {
     private readonly ExceptionAggregator _aggregator = aggregator;
-    private readonly RevitTestFramework.Common.RevitTestConfiguration _configuration = configuration;
-    private static RevitTestFramework.Common.ILogger _logger = RevitTestFramework.Common.FileLogger.ForContext(typeof(RevitXunitTestCaseRunner));
+    private readonly RevitTestConfiguration _configuration = configuration;
+    private static ILogger _logger = FileLogger.ForContext(typeof(RevitXunitTestCaseRunner));
     private static readonly object _loggerLock = new object();
 
     private Document? _document;
@@ -35,12 +35,12 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
         {
             if (pipeWriter != null)
             {
-                _logger = RevitTestFramework.Common.PipeAwareLogger.ForContext(typeof(RevitXunitTestCaseRunner), pipeWriter);
+                _logger = PipeAwareLogger.ForContext(typeof(RevitXunitTestCaseRunner), pipeWriter);
                 _logger.LogDebug("RevitXunitTestCaseRunner: Pipe-aware logger has been configured");
             }
             else
             {
-                _logger = RevitTestFramework.Common.FileLogger.ForContext(typeof(RevitXunitTestCaseRunner));
+                _logger = FileLogger.ForContext(typeof(RevitXunitTestCaseRunner));
                 _logger.LogDebug("RevitXunitTestCaseRunner: Reset to file-only logging");
             }
         }
@@ -49,7 +49,7 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
     /// <summary>
     /// Gets the current logger (thread-safe)
     /// </summary>
-    private static RevitTestFramework.Common.ILogger Logger
+    private static ILogger Logger
     {
         get
         {
@@ -319,7 +319,7 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
     private static Exception UnwrapException(Exception ex)
     {
         // Unwrap TargetInvocationException
-        if (ex is System.Reflection.TargetInvocationException tie && tie.InnerException != null)
+        if (ex is TargetInvocationException tie && tie.InnerException != null)
         {
             return UnwrapException(tie.InnerException);
         }
@@ -404,7 +404,7 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
     CancellationTokenSource cancellationTokenSource) : XunitTestRunner(test, messageBus, testClass, constructorArguments, testMethod, testMethodArguments,
            skipReason, beforeAfterAttributes, aggregator, cancellationTokenSource)
 {
-    private static RevitTestFramework.Common.ILogger _logger = RevitTestFramework.Common.FileLogger.ForContext(typeof(RevitUITestRunner));
+    private static ILogger _logger = FileLogger.ForContext(typeof(RevitUITestRunner));
     private static readonly object _loggerLock = new object();
 
     /// <summary>
@@ -417,12 +417,12 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
         {
             if (pipeWriter != null)
             {
-                _logger = RevitTestFramework.Common.PipeAwareLogger.ForContext(typeof(RevitUITestRunner), pipeWriter);
+                _logger = PipeAwareLogger.ForContext(typeof(RevitUITestRunner), pipeWriter);
                 _logger.LogDebug("RevitUITestRunner: Pipe-aware logger has been configured");
             }
             else
             {
-                _logger = RevitTestFramework.Common.FileLogger.ForContext(typeof(RevitUITestRunner));
+                _logger = FileLogger.ForContext(typeof(RevitUITestRunner));
                 _logger.LogDebug("RevitUITestRunner: Reset to file-only logging");
             }
         }
@@ -431,7 +431,7 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
     /// <summary>
     /// Gets the current logger (thread-safe)
     /// </summary>
-    private static RevitTestFramework.Common.ILogger Logger
+    private static ILogger Logger
     {
         get
         {
@@ -518,7 +518,7 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
     private static Exception UnwrapException(Exception ex)
     {
         // Unwrap TargetInvocationException
-        if (ex is System.Reflection.TargetInvocationException tie && tie.InnerException != null)
+        if (ex is TargetInvocationException tie && tie.InnerException != null)
         {
             return UnwrapException(tie.InnerException);
         }

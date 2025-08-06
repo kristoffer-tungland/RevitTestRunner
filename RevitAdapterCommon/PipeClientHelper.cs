@@ -419,7 +419,7 @@ public static class PipeClientHelper
         // Wait for main window to initialize
         logger?.LogInformation("PipeClientHelper: Waiting for Revit main window to initialize...");
         int waitTimeMs = 0;
-        const int maxWaitTimeMs = 30000; // 30 seconds
+        const int maxWaitTimeMs = 300000; // 5 minutes
         const int pollIntervalMs = 500;
 
         while (revitProc.MainWindowHandle == IntPtr.Zero && waitTimeMs < maxWaitTimeMs)

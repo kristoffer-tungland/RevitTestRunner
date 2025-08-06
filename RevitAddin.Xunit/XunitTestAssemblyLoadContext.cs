@@ -15,7 +15,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
     public string TestDirectory { get; }
     private readonly string _revitAddinDirectory;
     private Assembly? _revitAddinXunitAssembly;
-    private RevitTestFramework.Common.ILogger _logger;
+    private ILogger _logger;
     private StreamWriter? _pipeWriter;
 
     public XunitTestAssemblyLoadContext(string testDirectory) : base("XunitTestContext", isCollectible: false)
@@ -27,7 +27,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
             ?? throw new DirectoryNotFoundException("Could not determine RevitAddin.Xunit directory");
 
         // Start with file logger, will be upgraded to pipe-aware logger if pipe writer is provided
-        _logger = RevitTestFramework.Common.FileLogger.ForContext<XunitTestAssemblyLoadContext>();
+        _logger = FileLogger.ForContext<XunitTestAssemblyLoadContext>();
         _logger.LogTrace($"Logger initialized. Log file: {Path.Combine(_revitAddinDirectory, "Logs", $"RevitTestFramework.Common-{DateTime.Now:yyyyMMdd}.log")}");
         _logger.LogDebug($"XunitTestAssemblyLoadContext created for test directory: {TestDirectory}");
         _logger.LogDebug($"RevitAddin directory: {_revitAddinDirectory}");
@@ -44,7 +44,7 @@ internal class XunitTestAssemblyLoadContext : AssemblyLoadContext, ITestAssembly
     {
         _pipeWriter = pipeWriter;
         // Upgrade to pipe-aware logger
-        _logger = RevitTestFramework.Common.PipeAwareLogger.ForContext<XunitTestAssemblyLoadContext>(pipeWriter);
+        _logger = PipeAwareLogger.ForContext<XunitTestAssemblyLoadContext>(pipeWriter);
         _logger.LogDebug("Pipe writer configured for log forwarding");
         
         // IMPORTANT: Pass the pipe writer to RevitXunitExecutor so it can set up

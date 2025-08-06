@@ -11,39 +11,39 @@ public class RevitXunitTestFrameworkApplication : IExternalApplication
 {
     private PipeServer? _server;
     private RevitTask? _revitTask;
-    private static readonly RevitTestFramework.Common.ILogger Logger = RevitTestFramework.Common.FileLogger.ForContext<RevitXunitTestFrameworkApplication>();
+    private static readonly ILogger _logger = FileLogger.ForContext<RevitXunitTestFrameworkApplication>();
 
     public Result OnStartup(UIControlledApplication application)
     {
         try
         {
-            Logger.LogInformation("Startup beginning");
+            _logger.LogInformation("Startup beginning");
             
             // Register assembly resolution handler
             AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
 
             // Log startup info
             string addinLocation = Assembly.GetExecutingAssembly().Location;
-            Logger.LogInformation($"Starting from: {addinLocation}");
+            _logger.LogInformation($"Starting from: {addinLocation}");
 
             // Extract Revit version from the application
             var revitVersion = application.ControlledApplication.VersionNumber;
-            Logger.LogInformation($"Detected Revit version: {revitVersion}");
+            _logger.LogInformation($"Detected Revit version: {revitVersion}");
 
             // Use RevitTask to manage UI thread execution
             _revitTask = new RevitTask();
             var pipeName = PipeNaming.GetCurrentProcessPipeName();
-            Logger.LogInformation($"Using pipe name: {pipeName}");
+            _logger.LogInformation($"Using pipe name: {pipeName}");
             
             _server = new PipeServer(pipeName, _revitTask, path => new XunitTestAssemblyLoadContext(path));
             _server.Start();
             
-            Logger.LogInformation("Startup completed successfully");
+            _logger.LogInformation("Startup completed successfully");
             return Result.Succeeded;
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Startup failed");
+            _logger.LogError(ex, "Startup failed");
             
             // Also log to Trace as fallback
             Trace.WriteLine($"Startup failed: {ex.Message}");
@@ -57,7 +57,7 @@ public class RevitXunitTestFrameworkApplication : IExternalApplication
             }
             catch (Exception cleanupEx)
             {
-                Logger.LogError(cleanupEx, "Error during startup cleanup");
+                _logger.LogError(cleanupEx, "Error during startup cleanup");
                 Trace.WriteLine($"Error during startup cleanup: {cleanupEx.Message}");
             }
             
@@ -69,7 +69,7 @@ public class RevitXunitTestFrameworkApplication : IExternalApplication
     {
         try
         {
-            Logger.LogInformation("Shutdown starting");
+            _logger.LogInformation("Shutdown starting");
             
             // Unregister assembly resolution handler
             AppDomain.CurrentDomain.AssemblyResolve -= CurrentDomain_AssemblyResolve;
@@ -77,13 +77,13 @@ public class RevitXunitTestFrameworkApplication : IExternalApplication
             _server?.Dispose();
             _revitTask?.Dispose();
             
-            Logger.LogInformation("Shutdown completed successfully");
+            _logger.LogInformation("Shutdown completed successfully");
             
             return Result.Succeeded;
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Shutdown failed");
+            _logger.LogError(ex, "Shutdown failed");
             
             // Also log to Trace as fallback
             Trace.WriteLine($"Shutdown failed: {ex.Message}");
@@ -112,7 +112,7 @@ public class RevitXunitTestFrameworkApplication : IExternalApplication
             string potentialPath = Path.Combine(assemblyDirectory, $"{assemblyName.Name}.dll");
             if (File.Exists(potentialPath))
             {
-                Logger.LogTrace($"Resolved assembly: {assemblyName.Name} from: {potentialPath}");
+                _logger.LogTrace($"Resolved assembly: {assemblyName.Name} from: {potentialPath}");
                 return Assembly.LoadFrom(potentialPath);
             }
 
@@ -120,7 +120,7 @@ public class RevitXunitTestFrameworkApplication : IExternalApplication
             string[] candidateFiles = Directory.GetFiles(assemblyDirectory, $"{assemblyName.Name}*.dll");
             if (candidateFiles.Length > 0)
             {
-                Logger.LogTrace($"Resolved assembly: {assemblyName.Name} from: {candidateFiles[0]}");
+                _logger.LogTrace($"Resolved assembly: {assemblyName.Name} from: {candidateFiles[0]}");
                 return Assembly.LoadFrom(candidateFiles[0]);
             }
 
@@ -128,18 +128,18 @@ public class RevitXunitTestFrameworkApplication : IExternalApplication
             // Skip common system assemblies that should be resolved by the default context
             if (ShouldLogAssemblyResolutionFailure(assemblyName.Name))
             {
-                Logger.LogWarning($"Failed to resolve assembly: {assemblyName.Name}");
+                _logger.LogWarning($"Failed to resolve assembly: {assemblyName.Name}");
             }
             else
             {
-                Logger.LogTrace($"Assembly resolution delegated to default loader: {assemblyName.Name}");
+                _logger.LogTrace($"Assembly resolution delegated to default loader: {assemblyName.Name}");
             }
             
             return null;
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, $"Error resolving assembly: {args.Name}");
+            _logger.LogError(ex, $"Error resolving assembly: {args.Name}");
             return null;
         }
     }

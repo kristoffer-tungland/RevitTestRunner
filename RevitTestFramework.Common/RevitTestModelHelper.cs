@@ -11,7 +11,7 @@ public record RevitTestConfiguration(
     string? ProjectGuid = null,
     string? ModelGuid = null,
     string? LocalPath = null,
-    Autodesk.Revit.DB.DetachFromCentralOption DetachFromCentral = Autodesk.Revit.DB.DetachFromCentralOption.DoNotDetach,
+    DetachFromCentralOption DetachFromCentral = DetachFromCentralOption.DoNotDetach,
     int[]? WorksetsToOpen = null,
     string? CloudRegion = null,
     bool CloseModel = false);

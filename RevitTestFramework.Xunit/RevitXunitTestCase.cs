@@ -6,18 +6,18 @@ namespace RevitTestFramework.Xunit;
 
 public class RevitXunitTestCase : XunitTestCase
 {
-    private RevitTestFramework.Common.RevitTestConfiguration _configuration;
+    private Common.RevitTestConfiguration _configuration;
 
     [Obsolete("Called by the de-serializer", true)]
     public RevitXunitTestCase() 
     {
-        _configuration = new RevitTestFramework.Common.RevitTestConfiguration();
+        _configuration = new Common.RevitTestConfiguration();
     }
 
     public RevitXunitTestCase(IMessageSink diagnosticMessageSink,
                                TestMethodDisplay defaultMethodDisplay,
                                ITestMethod testMethod,
-                               RevitTestFramework.Common.RevitTestConfiguration configuration)
+                               Common.RevitTestConfiguration configuration)
         : base(diagnosticMessageSink, defaultMethodDisplay, testMethod)
     {
         _configuration = configuration;
@@ -53,12 +53,12 @@ public class RevitXunitTestCase : XunitTestCase
         var projectGuid = data.GetValue<string?>("ProjectGuid");
         var modelGuid = data.GetValue<string?>("ModelGuid");
         var localPath = data.GetValue<string?>("LocalPath");
-        var detachFromCentral = data.GetValue<Autodesk.Revit.DB.DetachFromCentralOption>("DetachOption");
+        var detachFromCentral = data.GetValue<DetachFromCentralOption>("DetachOption");
         var worksetsToOpen = data.GetValue<int[]?>("WorksetsToOpen");
         var cloudRegion = data.GetValue<string>("CloudRegion");
         var closeModel = data.GetValue<bool>("CloseModel");
         
-        _configuration = new RevitTestFramework.Common.RevitTestConfiguration(
+        _configuration = new Common.RevitTestConfiguration(
             projectGuid,
             modelGuid,
             localPath,
