@@ -404,3 +404,9 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# RevitTestRunner specific test output directories
+test-output-*/
+test-packages-*/
+test-nupkgs-*/
+nupkgs-*/

@@ -78,8 +78,8 @@ namespace RevitXunitAdapter
 
                 frameworkHandle.SendMessage(TestMessageLevel.Informational, "RevitXunitExecutor: Sending command to Revit via named pipe");
 
-                // For now, hardcode Revit version as "2025" as requested
-                const string revitVersion = "2025";
+                // Determine Revit version from the current assembly version
+                var revitVersion = GetRevitVersionFromAssembly(frameworkHandle);
                 
                 // Pass the framework handle directly - it will be converted to a logger automatically
                 PipeClientHelper.SendCommandStreaming(command, line =>
@@ -128,6 +128,39 @@ namespace RevitXunitAdapter
             catch (Exception ex)
             {
                 frameworkHandle.SendMessage(TestMessageLevel.Error, $"RevitXunitExecutor: Error in SendRunCommandStreaming: {ex}");
+            }
+        }
+
+        /// <summary>
+        /// Determines the Revit version from the current assembly version.
+        /// In our versioning scheme, the assembly version is in format <RevitVersion>.<Minor>.<Patch>,
+        /// so the major version number is the Revit version.
+        /// </summary>
+        /// <param name="frameworkHandle">Framework handle for logging</param>
+        /// <returns>The Revit version as a string (e.g., "2025", "2026")</returns>
+        private static string GetRevitVersionFromAssembly(IFrameworkHandle frameworkHandle)
+        {
+            try
+            {
+                var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+                var version = assembly.GetName().Version;
+                
+                if (version != null)
+                {
+                    var revitVersion = version.Major.ToString();
+                    frameworkHandle.SendMessage(TestMessageLevel.Informational, $"RevitXunitExecutor: Determined Revit version from assembly: {revitVersion} (full version: {version})");
+                    return revitVersion;
+                }
+                else
+                {
+                    frameworkHandle.SendMessage(TestMessageLevel.Warning, "RevitXunitExecutor: Assembly version is null, falling back to default Revit version 2025");
+                    return "2025";
+                }
+            }
+            catch (Exception ex)
+            {
+                frameworkHandle.SendMessage(TestMessageLevel.Warning, $"RevitXunitExecutor: Error determining Revit version from assembly: {ex.Message}. Falling back to default Revit version 2025");
+                return "2025";
             }
         }
 

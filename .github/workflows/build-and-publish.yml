@@ -1,0 +1,159 @@
+name: Build and Publish
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  SOLUTION_FILE: 'RevitTestRunner.sln'
+  PACKAGE_PROJECT: 'RevitXunitAdapter/RevitXunitAdapter.csproj'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    strategy:
+      matrix:
+        revit-version: [2025, 2026]
+    
+    outputs:
+      version-2025: ${{ steps.version.outputs.version-2025 }}
+      version-2026: ${{ steps.version.outputs.version-2026 }}
+      base-version: ${{ steps.version.outputs.semVer }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Required for GitVersion
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+    
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v1.1.1
+      with:
+        versionSpec: '5.x'
+    
+    - name: Determine Version
+      id: version
+      uses: gittools/actions/gitversion/execute@v1.1.1
+      with:
+        useConfigFile: true
+        configFilePath: GitVersion.yml
+    
+    - name: Calculate Revit-specific version
+      id: revit-version
+      run: |
+        $baseVersion = "${{ steps.version.outputs.semVer }}"
+        $revitVersion = "${{ matrix.revit-version }}"
+        
+        # Parse base version (e.g., "1.2.3-alpha.1" -> major=1, minor=2, patch=3, prerelease=alpha.1)
+        if ($baseVersion -match '^(\d+)\.(\d+)\.(\d+)(.*)$') {
+          $major = $matches[1]
+          $minor = $matches[2] 
+          $patch = $matches[3]
+          $prerelease = $matches[4]
+        } else {
+          Write-Error "Could not parse version: $baseVersion"
+          exit 1
+        }
+        
+        # Create Revit-specific version: RevitVersion.Minor.Patch[prerelease]
+        $revitSpecificVersion = "$revitVersion.$minor.$patch$prerelease"
+        
+        echo "Base version: $baseVersion"
+        echo "Revit $revitVersion version: $revitSpecificVersion"
+        echo "revit-specific-version=$revitSpecificVersion" >> $env:GITHUB_OUTPUT
+        echo "version-$revitVersion=$revitSpecificVersion" >> $env:GITHUB_OUTPUT
+    
+    - name: Display version information
+      run: |
+        echo "Base Version: ${{ steps.version.outputs.semVer }}"
+        echo "Revit ${{ matrix.revit-version }} Version: ${{ steps.revit-version.outputs.revit-specific-version }}"
+    
+    - name: Restore NuGet packages
+      run: dotnet restore ${{ env.SOLUTION_FILE }} /p:RevitVersion=${{ matrix.revit-version }}
+    
+    - name: Build solution
+      run: dotnet build ${{ env.SOLUTION_FILE }} --configuration Release --no-restore /p:RevitVersion=${{ matrix.revit-version }} /p:Version=${{ steps.revit-version.outputs.revit-specific-version }}
+    
+    - name: Run tests
+      run: dotnet test ${{ env.SOLUTION_FILE }} --configuration Release --no-build --verbosity normal --logger trx --results-directory TestResults-${{ matrix.revit-version }} /p:RevitVersion=${{ matrix.revit-version }}
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-revit-${{ matrix.revit-version }}
+        path: TestResults-${{ matrix.revit-version }}/*.trx
+    
+    - name: Pack NuGet package
+      run: dotnet pack ${{ env.PACKAGE_PROJECT }} --configuration Release --no-build --output nupkgs-${{ matrix.revit-version }} /p:RevitVersion=${{ matrix.revit-version }} /p:Version=${{ steps.revit-version.outputs.revit-specific-version }}
+    
+    - name: Upload NuGet package artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuget-package-revit-${{ matrix.revit-version }}
+        path: nupkgs-${{ matrix.revit-version }}/*.nupkg
+
+  publish-github:
+    needs: build
+    runs-on: windows-latest
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    
+    strategy:
+      matrix:
+        revit-version: [2025, 2026]
+    
+    steps:
+    - name: Download NuGet package
+      uses: actions/download-artifact@v4
+      with:
+        name: nuget-package-revit-${{ matrix.revit-version }}
+        path: nupkgs
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Add GitHub NuGet source
+      run: dotnet nuget add source --username USERNAME --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+    
+    - name: Push to GitHub Package Registry
+      run: dotnet nuget push "nupkgs/*.nupkg" --source "github" --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+
+  publish-nuget:
+    needs: build
+    runs-on: windows-latest
+    if: github.event_name == 'release'
+    
+    strategy:
+      matrix:
+        revit-version: [2025, 2026]
+    
+    steps:
+    - name: Download NuGet package
+      uses: actions/download-artifact@v4
+      with:
+        name: nuget-package-revit-${{ matrix.revit-version }}
+        path: nupkgs
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Push to NuGet.org
+      run: dotnet nuget push "nupkgs/*.nupkg" --source "https://api.nuget.org/v3/index.json" --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate

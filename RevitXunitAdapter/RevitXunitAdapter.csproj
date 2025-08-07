@@ -13,6 +13,10 @@
     <!-- Default RevitVersion if not defined elsewhere -->
     <RevitVersion Condition="'$(RevitVersion)' == ''">2025</RevitVersion>
     
+    <!-- Ensure assembly version matches the build version for multi-version support -->
+    <AssemblyVersion>$(Version)</AssemblyVersion>
+    <FileVersion>$(Version)</FileVersion>
+    
     <!-- NuGet Package Properties -->
     <PackageId>RevitXunit.TestAdapter</PackageId>
     <PackageVersion>$(Version)</PackageVersion>

@@ -1,0 +1,73 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - '!.github/workflows/**'
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  SOLUTION_FILE: 'RevitTestRunner.sln'
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    
+    strategy:
+      matrix:
+        revit-version: [2025, 2026]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+    
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-revit${{ matrix.revit-version }}-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-revit${{ matrix.revit-version }}-
+          ${{ runner.os }}-nuget-
+    
+    - name: Restore packages
+      run: dotnet restore ${{ env.SOLUTION_FILE }} /p:RevitVersion=${{ matrix.revit-version }}
+    
+    - name: Build solution
+      run: dotnet build ${{ env.SOLUTION_FILE }} --configuration Release --no-restore /p:RevitVersion=${{ matrix.revit-version }}
+    
+    - name: Run tests
+      run: dotnet test ${{ env.SOLUTION_FILE }} --configuration Release --no-build --verbosity normal --logger trx --results-directory TestResults-${{ matrix.revit-version }} /p:RevitVersion=${{ matrix.revit-version }}
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: pr-test-results-${{ github.event.number }}-revit-${{ matrix.revit-version }}
+        path: TestResults-${{ matrix.revit-version }}/*.trx
+    
+    - name: Test pack (without publishing)
+      run: dotnet pack RevitXunitAdapter/RevitXunitAdapter.csproj --configuration Release --no-build --output test-nupkgs-${{ matrix.revit-version }} /p:RevitVersion=${{ matrix.revit-version }} /p:Version=${{ matrix.revit-version }}.0.1-test
+    
+    - name: Verify package contents
+      run: |
+        $revitVersion = "${{ matrix.revit-version }}"
+        $package = Get-ChildItem -Path "test-nupkgs-$revitVersion" -Filter "*.nupkg" | Select-Object -First 1
+        if ($package) {
+          Write-Host "? Revit $revitVersion package created successfully: $($package.Name)"
+          Write-Host "?? Package size: $([math]::Round($package.Length / 1MB, 2)) MB"
+        } else {
+          Write-Host "? No package found for Revit $revitVersion"
+          exit 1
+        }
