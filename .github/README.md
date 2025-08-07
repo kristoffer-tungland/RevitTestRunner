@@ -190,19 +190,18 @@ To add support for a new Revit version (e.g., 2027):
 - Check that the package ID doesn't conflict with existing packages
 - Ensure you have permissions to publish to the target feed
 - Verify all Revit-specific packages are being generated correctly
+- **Package Path Issues**: Ensure artifact upload/download paths are consistent
+- **Missing Packages**: Check that the build job successfully creates .nupkg files
+- **Artifact Structure**: Verify that artifacts contain the expected files in the correct paths
 
-### Test Execution Issues
-- **Framework tests failing**: Check unit test logic and dependencies
-- **Want to run Revit tests**: These must be run locally with Revit installed
-- **Filter not working**: Verify the filter syntax matches your project structure
+### Build Issues
+- **Package Creation Failures**: Check the build output for NuGet pack errors
+- **Missing Dependencies**: Ensure all project references build successfully
+- **Version Conflicts**: Verify that GitVersion generates valid semantic versions
+- **Output Directory**: Confirm packages are created in the expected output directory
 
-### Version Issues
-- Review the GitVersion configuration in `GitVersion.yml`
-- Check commit messages for unintended version bumps
-- Verify that tags follow the expected format (e.g., `v1.0.0`)
-- Ensure the Revit-specific version calculation logic is working correctly
-
-### Matrix Job Issues
-- If one Revit version fails, others will continue building
-- Check job logs for version-specific errors
-- Verify all artifacts are being uploaded with correct names
+### Artifact Issues
+- **Upload/Download Mismatch**: Ensure artifact paths match between jobs
+- **Missing Files**: Check that the build job produces the expected artifacts
+- **Path Structure**: Verify directory structure in uploaded artifacts
+- **File Permissions**: Ensure artifacts are accessible and not corrupted- Verify all artifacts are being uploaded with correct names

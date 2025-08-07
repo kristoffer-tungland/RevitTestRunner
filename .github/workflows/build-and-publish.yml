@@ -125,13 +125,25 @@ jobs:
         path: TestResults-${{ matrix.revit-version }}/*.trx
     
     - name: Pack NuGet package
-      run: dotnet pack ${{ env.PACKAGE_PROJECT }} --configuration Release --no-build --output nupkgs-${{ matrix.revit-version }} /p:RevitVersion=${{ matrix.revit-version }} /p:Version=${{ steps.revit-version.outputs.revit-specific-version }}
+      run: dotnet pack ${{ env.PACKAGE_PROJECT }} --configuration Release --no-build --output nupkgs /p:RevitVersion=${{ matrix.revit-version }} /p:Version=${{ steps.revit-version.outputs.revit-specific-version }}
+    
+    - name: Verify package was created
+      run: |
+        $packages = Get-ChildItem -Path "nupkgs" -Filter "*.nupkg"
+        if ($packages.Count -eq 0) {
+          Write-Error "No NuGet package found in nupkgs directory"
+          exit 1
+        }
+        Write-Host "? Package created successfully:"
+        foreach ($package in $packages) {
+          Write-Host "  - $($package.Name) ($([math]::Round($package.Length / 1MB, 2)) MB)"
+        }
     
     - name: Upload NuGet package artifact
       uses: actions/upload-artifact@v4
       with:
         name: nuget-package-revit-${{ matrix.revit-version }}
-        path: nupkgs-${{ matrix.revit-version }}/*.nupkg
+        path: nupkgs/*.nupkg
 
   publish-github:
     needs: build
@@ -149,6 +161,13 @@ jobs:
         name: nuget-package-revit-${{ matrix.revit-version }}
         path: nupkgs
     
+    - name: List downloaded files
+      run: |
+        Write-Host "Contents of nupkgs directory:"
+        Get-ChildItem -Path "nupkgs" -Recurse | ForEach-Object {
+          Write-Host "  $($_.FullName)"
+        }
+    
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
@@ -158,7 +177,18 @@ jobs:
       run: dotnet nuget add source --username USERNAME --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
     
     - name: Push to GitHub Package Registry
-      run: dotnet nuget push "nupkgs/*.nupkg" --source "github" --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+      run: |
+        $packages = Get-ChildItem -Path "nupkgs" -Filter "*.nupkg"
+        if ($packages.Count -eq 0) {
+          Write-Error "No NuGet packages found to publish"
+          exit 1
+        }
+        
+        Write-Host "Publishing $($packages.Count) package(s) to GitHub Package Registry:"
+        foreach ($package in $packages) {
+          Write-Host "  Publishing: $($package.Name)"
+          dotnet nuget push "$($package.FullName)" --source "github" --api-key "${{ secrets.GITHUB_TOKEN }}" --skip-duplicate
+        }
 
   publish-nuget:
     needs: build
@@ -176,10 +206,28 @@ jobs:
         name: nuget-package-revit-${{ matrix.revit-version }}
         path: nupkgs
     
+    - name: List downloaded files
+      run: |
+        Write-Host "Contents of nupkgs directory:"
+        Get-ChildItem -Path "nupkgs" -Recurse | ForEach-Object {
+          Write-Host "  $($_.FullName)"
+        }
+    
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
     
     - name: Push to NuGet.org
-      run: dotnet nuget push "nupkgs/*.nupkg" --source "https://api.nuget.org/v3/index.json" --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
+      run: |
+        $packages = Get-ChildItem -Path "nupkgs" -Filter "*.nupkg"
+        if ($packages.Count -eq 0) {
+          Write-Error "No NuGet packages found to publish"
+          exit 1
+        }
+        
+        Write-Host "Publishing $($packages.Count) package(s) to NuGet.org:"
+        foreach ($package in $packages) {
+          Write-Host "  Publishing: $($package.Name)"
+          dotnet nuget push "$($package.FullName)" --source "https://api.nuget.org/v3/index.json" --api-key "${{ secrets.NUGET_API_KEY }}" --skip-duplicate
+        }

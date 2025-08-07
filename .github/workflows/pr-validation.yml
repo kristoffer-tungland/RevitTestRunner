@@ -78,16 +78,18 @@ jobs:
         path: TestResults-${{ matrix.revit-version }}/*.trx
     
     - name: Test pack (without publishing)
-      run: dotnet pack RevitXunitAdapter/RevitXunitAdapter.csproj --configuration Release --no-build --output test-nupkgs-${{ matrix.revit-version }} /p:RevitVersion=${{ matrix.revit-version }} /p:Version=${{ matrix.revit-version }}.0.1-test
+      run: dotnet pack RevitXunitAdapter/RevitXunitAdapter.csproj --configuration Release --no-build --output test-nupkgs /p:RevitVersion=${{ matrix.revit-version }} /p:Version=${{ matrix.revit-version }}.0.1-test
     
     - name: Verify package contents
       run: |
         $revitVersion = "${{ matrix.revit-version }}"
-        $package = Get-ChildItem -Path "test-nupkgs-$revitVersion" -Filter "*.nupkg" | Select-Object -First 1
-        if ($package) {
-          Write-Host "? Revit $revitVersion package created successfully: $($package.Name)"
-          Write-Host "?? Package size: $([math]::Round($package.Length / 1MB, 2)) MB"
-        } else {
+        $packages = Get-ChildItem -Path "test-nupkgs" -Filter "*.nupkg"
+        if ($packages.Count -eq 0) {
           Write-Host "? No package found for Revit $revitVersion"
           exit 1
+        }
+        
+        foreach ($package in $packages) {
+          Write-Host "? Revit $revitVersion package created successfully: $($package.Name)"
+          Write-Host "?? Package size: $([math]::Round($package.Length / 1MB, 2)) MB"
         }
