@@ -173,8 +173,13 @@ jobs:
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
     
-    - name: Add GitHub NuGet source
-      run: dotnet nuget add source --username USERNAME --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+    - name: Set up NuGet authentication for GitHub Packages
+      run: |
+        dotnet nuget add source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" `
+          --name github `
+          --username ${{ github.actor }} `
+          --password ${{ secrets.GH_TOKEN }} `
+          --store-password-in-clear-text
     
     - name: Push to GitHub Package Registry
       run: |
@@ -187,7 +192,7 @@ jobs:
         Write-Host "Publishing $($packages.Count) package(s) to GitHub Package Registry:"
         foreach ($package in $packages) {
           Write-Host "  Publishing: $($package.Name)"
-          dotnet nuget push "$($package.FullName)" --source "github" --api-key "${{ secrets.GITHUB_TOKEN }}" --skip-duplicate
+          dotnet nuget push "$($package.FullName)" --source "github" --api-key "${{ secrets.GH_TOKEN }}" --skip-duplicate
         }
 
   publish-nuget:

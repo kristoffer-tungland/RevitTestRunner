@@ -32,6 +32,15 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
     
+    - name: Set up NuGet authentication for GitHub Packages (for testing)
+      run: |
+        # Set up authentication for potential NuGet package testing
+        dotnet nuget add source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" `
+          --name github `
+          --username ${{ github.actor }} `
+          --password ${{ secrets.GH_TOKEN }} `
+          --store-password-in-clear-text
+    
     - name: Cache NuGet packages
       uses: actions/cache@v4
       with:

@@ -70,6 +70,17 @@ The CI/CD pipeline focuses on:
 
 You need to configure the following secrets in your GitHub repository settings:
 
+### For GitHub Package Registry
+- `GH_TOKEN`: Personal Access Token with package permissions
+  1. Go to GitHub Settings ? Developer settings ? Personal access tokens ? Tokens (classic)
+  2. Generate a new token with the following scopes:
+     - `write:packages` - Allows uploading packages to GitHub Package Registry
+     - `read:packages` - Allows downloading packages from GitHub Package Registry
+     - `repo` - Required for accessing private repositories
+  3. Add this token as a repository secret named `GH_TOKEN`
+  
+  **Note**: The default `GITHUB_TOKEN` has limited permissions and may not work for package publishing in all scenarios. Using a custom Personal Access Token ensures proper authentication.
+
 ### For NuGet.org Publishing
 - `NUGET_API_KEY`: Your NuGet.org API key
   1. Go to [NuGet.org](https://www.nuget.org/)
@@ -77,8 +88,21 @@ You need to configure the following secrets in your GitHub repository settings:
   3. Create a new API key with push permissions for your package
   4. Add this key as a repository secret
 
-### For GitHub Package Registry
-- `GITHUB_TOKEN`: Automatically provided by GitHub Actions (no setup required)
+### Authentication Setup
+
+The workflows automatically configure NuGet authentication using your `GH_TOKEN`:
+
+```yaml
+- name: Set up NuGet authentication for GitHub Packages
+  run: |
+    dotnet nuget add source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" `
+      --name github `
+      --username ${{ github.actor }} `
+      --password ${{ secrets.GH_TOKEN }} `
+      --store-password-in-clear-text
+```
+
+This ensures proper authentication when pushing packages to your GitHub Package Registry.
 
 ## Versioning Strategy
 
