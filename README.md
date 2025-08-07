@@ -1,5 +1,18 @@
 # Revit Test Runner
 
+[![Build and Publish](https://github.com/kristoffer-tungland/RevitTestRunner/actions/workflows/build-and-publish.yml/badge.svg)](https://github.com/kristoffer-tungland/RevitTestRunner/actions/workflows/build-and-publish.yml)
+[![PR Validation](https://github.com/kristoffer-tungland/RevitTestRunner/actions/workflows/pr-validation.yml/badge.svg)](https://github.com/kristoffer-tungland/RevitTestRunner/actions/workflows/pr-validation.yml)
+[![NuGet](https://img.shields.io/nuget/v/RevitXunit.TestAdapter.svg?logo=nuget&label=NuGet)](https://www.nuget.org/packages/RevitXunit.TestAdapter/)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/RevitXunit.TestAdapter.svg?logo=nuget&label=Total%20Downloads)](https://www.nuget.org/packages/RevitXunit.TestAdapter/)
+
+## Supported Revit Versions
+
+| Revit Version | NuGet Package | Status |
+|---------------|---------------|--------|
+| 2025 | [![NuGet 2025](https://img.shields.io/nuget/v/RevitXunit.TestAdapter?logo=nuget&label=2025&color=blue&versionPrefix=2025)](https://www.nuget.org/packages/RevitXunit.TestAdapter/) | ✓ Supported |
+| 2026 | [![NuGet 2026](https://img.shields.io/nuget/v/RevitXunit.TestAdapter?logo=nuget&label=2026&color=green&versionPrefix=2026)](https://www.nuget.org/packages/RevitXunit.TestAdapter/) | ✓ Supported |
+
+
 **RevitXunit.TestAdapter** is a powerful xUnit test adapter that enables seamless integration testing of Autodesk Revit add-ins directly within the Revit environment. Write standard xUnit tests that automatically load Revit models, access the full Revit API, and execute inside a running Revit instance while reporting results back to Visual Studio Test Explorer or your CI/CD pipeline. Perfect for BIM developers who need reliable, automated testing of Revit functionality without the complexity of manual testing workflows.
 
 ---
@@ -285,9 +298,16 @@ public void OpenSpecificWorksets(Document document)
 
 ## Example tests
 
+
 See the following files in the [MyRevitTestsXunit](./MyRevitTestsXunit/) project for real-world test examples:
 - [RollbackTests.cs](./MyRevitTestsXunit/RollbackTests.cs)
 - [OpenLocalModelTests.cs](./MyRevitTestsXunit/OpenLocalModelTests.cs)
 - [ApplicationTests.cs](./MyRevitTestsXunit/ApplicationTests.cs)
 - [CancellationTokenTests.cs](./MyRevitTestsXunit/CancellationTokenTests.cs)
 - [CloudModelTests.cs](./MyRevitTestsXunit/CloudModelTests.cs)
+
+---
+
+## CI/CD Pipeline Documentation
+
+For details on how to manage and configure CI/CD for this repository, see [CI/CD Pipeline Guide](.github/pipeline-readme.md).
