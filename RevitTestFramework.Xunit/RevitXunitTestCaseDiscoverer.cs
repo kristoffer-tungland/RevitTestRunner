@@ -19,6 +19,7 @@ public class RevitXunitTestCaseDiscoverer(IMessageSink diagnosticMessageSink) : 
         var worksetsToOpen = factAttribute.GetNamedArgument<int[]>("WorksetsToOpen");
         var cloudRegion = factAttribute.GetNamedArgument<CloudRegion>("CloudRegion");
         var closeModel = factAttribute.GetNamedArgument<bool>("CloseModel");
+        var timeout = factAttribute.GetNamedArgument<int>("Timeout");
 
         // Convert from Xunit enum to Revit API enum
         var revitDetachFromCentral = (DetachFromCentralOption)(int)detachOption;
@@ -40,7 +41,8 @@ public class RevitXunitTestCaseDiscoverer(IMessageSink diagnosticMessageSink) : 
             revitDetachFromCentral,
             worksetsToOpen,
             cloudRegionString,
-            closeModel);
+            closeModel,
+            timeout);
 
         yield return new RevitXunitTestCase(_diagnosticMessageSink,
             discoveryOptions.MethodDisplayOrDefault(), testMethod,

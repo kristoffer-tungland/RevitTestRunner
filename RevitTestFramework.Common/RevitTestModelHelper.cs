@@ -14,7 +14,8 @@ public record RevitTestConfiguration(
     DetachFromCentralOption DetachFromCentral = DetachFromCentralOption.DoNotDetach,
     int[]? WorksetsToOpen = null,
     string? CloudRegion = null,
-    bool CloseModel = false);
+    bool CloseModel = false,
+    int Timeout = 0);
 
 public static class RevitTestModelHelper
 {

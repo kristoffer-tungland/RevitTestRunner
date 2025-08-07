@@ -45,6 +45,7 @@ public class RevitXunitTestCase : XunitTestCase
         data.AddValue("WorksetsToOpen", _configuration.WorksetsToOpen);
         data.AddValue("CloudRegion", _configuration.CloudRegion);
         data.AddValue("CloseModel", _configuration.CloseModel);
+        data.AddValue("Timeout", _configuration.Timeout);
     }
 
     public override void Deserialize(IXunitSerializationInfo data)
@@ -57,6 +58,7 @@ public class RevitXunitTestCase : XunitTestCase
         var worksetsToOpen = data.GetValue<int[]?>("WorksetsToOpen");
         var cloudRegion = data.GetValue<string>("CloudRegion");
         var closeModel = data.GetValue<bool>("CloseModel");
+        var timeout = data.GetValue<int>("Timeout");
         
         _configuration = new Common.RevitTestConfiguration(
             projectGuid,
@@ -65,6 +67,7 @@ public class RevitXunitTestCase : XunitTestCase
             detachFromCentral,
             worksetsToOpen,
             cloudRegion,
-            closeModel);
+            closeModel,
+            timeout);
     }
 }

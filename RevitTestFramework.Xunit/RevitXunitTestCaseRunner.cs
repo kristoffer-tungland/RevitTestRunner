@@ -77,7 +77,7 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
             
             if (paramType == typeof(UIApplication))
             {
-                // Note: UIApplication will be injected later when infrastructure is available
+                // Note:UIApplication will be injected later when infrastructure is available
                 args[i] = null; // Placeholder - will be replaced in CreateTestRunner
             }
             else if (paramType == typeof(Document) || 
@@ -159,158 +159,234 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
 
     protected override async Task<RunSummary> RunTestAsync()
     {
-        // Run the test on a background thread to avoid blocking Revit UI
-        return await Task.Run(async () =>
+        // Setup timeout if specified
+        CancellationTokenSource? timeoutCts = null;
+        CancellationTokenSource? combinedCts = null;
+        
+        if (_configuration.Timeout > 0)
         {
-            var methodName = TestCase.TestMethod.Method.Name;
-            var className = TestCase.TestMethod.TestClass.Class.Name;
+            timeoutCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(_configuration.Timeout));
+            combinedCts = CancellationTokenSource.CreateLinkedTokenSource(CancellationTokenSource.Token, timeoutCts.Token);
+            Logger.LogDebug($"Test timeout configured: {_configuration.Timeout}ms");
+        }
+
+        try
+        {
+            // Use the combined cancellation token source if timeout is configured
+            var effectiveCts = combinedCts ?? CancellationTokenSource;
             
-            // Check if we're in debug mode - if debugger is attached, add a breakpoint opportunity
-            if (Debugger.IsAttached)
+            // Run the test on a background thread to avoid blocking Revit UI
+            return await Task.Run(async () =>
             {
-                // Only break if this is explicitly a debug test or if environment variable is set
-                var forceBreak = Environment.GetEnvironmentVariable("REVIT_TEST_BREAK_ON_ALL") == "true";
-                var isDebugTest = methodName.Contains("Debug", StringComparison.OrdinalIgnoreCase) || 
-                                 className.Contains("Debug", StringComparison.OrdinalIgnoreCase);
+                var methodName = TestCase.TestMethod.Method.Name;
+                var className = TestCase.TestMethod.TestClass.Class.Name;
                 
-                if (forceBreak || isDebugTest)
-                {
-                    Logger.LogDebug($"Breaking for test '{methodName}' (ForceBreak={forceBreak}, IsDebugTest={isDebugTest})");
-                    // This line serves as a potential breakpoint location for debugging test setup
-                    Debugger.Break(); // This will pause execution if a debugger is attached
-                }
-                else
-                {
-                    Logger.LogDebug($"Skipping break for test '{methodName}' (set REVIT_TEST_BREAK_ON_ALL=true to break on all tests)");
-                }
-            }
-
-            // Check if the test method actually requires a Document parameter
-            var testMethod = TestCase.TestMethod.Method.ToRuntimeMethod();
-            var requiresDocument = DoesTestMethodRequireDocument(testMethod);
-            
-            Logger.LogDebug($"Test '{methodName}' requires document: {requiresDocument}");
-                        
-            try
-            {
-                // Only attempt to open model if the test method requires a Document parameter
-                if (requiresDocument)
-                {
-                    // Request model setup on UI thread and wait for completion
-                    try
-                    {
-                        // Get the test assembly directory for relative path resolution
-                        var testAssemblyDirectory = Path.GetDirectoryName(RevitTestInfrastructure.ActiveCommand.TestAssembly);
-
-                        _document = await RevitTestInfrastructure.RevitTask.Run(app =>
-                        {
-                            return RevitTestModelHelper.OpenModel(app, _configuration, testAssemblyDirectory);
-                        });
-                        
-                        // If no document was opened and all parameters are null, 
-                        // this might be a test that doesn't need a document
-                        if (_document == null && string.IsNullOrEmpty(_configuration.LocalPath) && 
-                            string.IsNullOrEmpty(_configuration.ProjectGuid) && string.IsNullOrEmpty(_configuration.ModelGuid))
-                        {
-                            Logger.LogDebug($"Test '{methodName}' will run without a specific document (no active document available)");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        var unwrappedException = UnwrapException(ex);
-                        throw new InvalidOperationException($"Model setup failed for test '{methodName}': {unwrappedException.Message}", unwrappedException);
-                    }
-                }
-                else
-                {
-                    Logger.LogDebug($"Skipping model opening for test '{methodName}' - no Document parameter required");
-                }
-
-                // Only create transaction group if we have a document
-                if (_document != null)
-                {
-                    try
-                    {
-                        _transactionGroup = await RevitTestInfrastructure.RevitTask.Run(app =>
-                        {
-                            // Start a transaction group for the test
-                            var tg = new TransactionGroup(_document, $"Test: {methodName}");
-                            tg.Start();
-                            return tg;
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        var unwrappedException = UnwrapException(ex);
-                        throw new InvalidOperationException($"Transaction group creation failed for test '{methodName}': {unwrappedException.Message}", unwrappedException);
-                    }
-                }
-
-                // Now run the test with the prepared document
-                return await base.RunTestAsync();
-            }
-            catch (Exception ex)
-            {
-                // Handle any exceptions that occur during test setup or execution
-                var unwrappedException = UnwrapException(ex);
-                Logger.LogError(unwrappedException, $"Error running test {methodName}");
-                
-                // Add the unwrapped exception to the aggregator for proper reporting
-                _aggregator.Add(unwrappedException);
-                
-                // Let the base class handle the exception reporting
-                return await base.RunTestAsync();
-            }
-            finally
-            {
-                // Store reference to document for potential closing before cleaning up _document field
-                var documentToClose = _document;
-                
-                // Clean up on UI thread
-                _document = null;
-                await RevitTestInfrastructure.RevitTask.Run(app =>
-                {
-                    if (_transactionGroup != null)
-                    {
-                        try
-                        {
-                            // Rollback the transaction group
-                            _transactionGroup.RollBack();
-                        }
-                        catch (Exception ex)
-                        {
-                            var unwrappedException = UnwrapException(ex);
-                            Logger.LogError(unwrappedException, "Error rolling back transaction group");
-                        }
-                        finally
-                        {
-                            _transactionGroup.Dispose();
-                        }
-                    }
-                    
-                    // Close the model if CloseModel flag is set
-                    if (_configuration.CloseModel && documentToClose != null)
-                    {
-                        try
-                        {
-                            Logger.LogInformation($"Closing model '{documentToClose.Title}' as requested by CloseModel flag");
-                            documentToClose.Close(false); // Close without saving
-                        }
-                        catch (Exception ex)
-                        {
-                            var unwrappedException = UnwrapException(ex);
-                            Logger.LogError(unwrappedException, "Error closing model");
-                            // Don't throw here - this is cleanup, and we don't want to mask test results
-                        }
-                    }
-                });
-                
+                // Check if we're in debug mode - if debugger is attached, add a breakpoint opportunity
                 if (Debugger.IsAttached)
                 {
-                    Logger.LogDebug($"Completed test '{methodName}' cleanup");
+                    // Only break if this is explicitly a debug test or if environment variable is set
+                    var forceBreak = Environment.GetEnvironmentVariable("REVIT_TEST_BREAK_ON_ALL") == "true";
+                    var isDebugTest = methodName.Contains("Debug", StringComparison.OrdinalIgnoreCase) || 
+                                     className.Contains("Debug", StringComparison.OrdinalIgnoreCase);
+                    
+                    if (forceBreak || isDebugTest)
+                    {
+                        Logger.LogDebug($"Breaking for test '{methodName}' (ForceBreak={forceBreak}, IsDebugTest={isDebugTest})");
+                        // This line serves as a potential breakpoint location for debugging test setup
+                        Debugger.Break(); // This will pause execution if a debugger is attached
+                    }
+                    else
+                    {
+                        Logger.LogDebug($"Skipping break for test '{methodName}' (set REVIT_TEST_BREAK_ON_ALL=true to break on all tests)");
+                    }
                 }
+
+                // Check if the test method actually requires a Document parameter
+                var testMethod = TestCase.TestMethod.Method.ToRuntimeMethod();
+                var requiresDocument = DoesTestMethodRequireDocument(testMethod);
+                
+                Logger.LogDebug($"Test '{methodName}' requires document: {requiresDocument}");
+                        
+                try
+                {
+                    // Check for cancellation before expensive operations
+                    effectiveCts.Token.ThrowIfCancellationRequested();
+                    
+                    // Only attempt to open model if the test method requires a Document parameter
+                    if (requiresDocument)
+                    {
+                        // Request model setup on UI thread and wait for completion
+                        try
+                        {
+                            // Get the test assembly directory for relative path resolution
+                            var testAssemblyDirectory = Path.GetDirectoryName(RevitTestInfrastructure.ActiveCommand.TestAssembly);
+
+                            _document = await RevitTestInfrastructure.RevitTask.Run(app =>
+                            {
+                                // Check for cancellation during model opening
+                                effectiveCts.Token.ThrowIfCancellationRequested();
+                                return RevitTestModelHelper.OpenModel(app, _configuration, testAssemblyDirectory);
+                            });
+                        
+                            // If no document was opened and all parameters are null, 
+                            // this might be a test that doesn't need a document
+                            if (_document == null && string.IsNullOrEmpty(_configuration.LocalPath) && 
+                                string.IsNullOrEmpty(_configuration.ProjectGuid) && string.IsNullOrEmpty(_configuration.ModelGuid))
+                            {
+                                Logger.LogDebug($"Test '{methodName}' will run without a specific document (no active document available)");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            var unwrappedException = UnwrapException(ex);
+                            throw new InvalidOperationException($"Model setup failed for test '{methodName}': {unwrappedException.Message}", unwrappedException);
+                        }
+                    }
+                    else
+                    {
+                        Logger.LogDebug($"Skipping model opening for test '{methodName}' - no Document parameter required");
+                    }
+
+                    // Check for cancellation before transaction setup
+                    effectiveCts.Token.ThrowIfCancellationRequested();
+
+                    // Only create transaction group if we have a document
+                    if (_document != null)
+                    {
+                        try
+                        {
+                            _transactionGroup = await RevitTestInfrastructure.RevitTask.Run(app =>
+                            {
+                                // Check for cancellation during transaction setup
+                                effectiveCts.Token.ThrowIfCancellationRequested();
+                                // Start a transaction group for the test
+                                var tg = new TransactionGroup(_document, $"Test: {methodName}");
+                                tg.Start();
+                                return tg;
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            var unwrappedException = UnwrapException(ex);
+                            throw new InvalidOperationException($"Transaction group creation failed for test '{methodName}': {unwrappedException.Message}", unwrappedException);
+                        }
+                    }
+
+                    // Now run the test with the prepared document, using our custom runner creation
+                    // that includes the effective cancellation token
+                    return await RunTestWithEffectiveCancellationToken(effectiveCts);
+                }
+                catch (Exception ex)
+                {
+                    // Handle any exceptions that occur during test setup or execution
+                    var unwrappedException = UnwrapException(ex);
+                    Logger.LogError(unwrappedException, $"Error running test {methodName}");
+                    
+                    // Add the unwrapped exception to the aggregator for proper reporting
+                    _aggregator.Add(unwrappedException);
+                    
+                    // Let the base class handle the exception reporting with effective CTS
+                    return await RunTestWithEffectiveCancellationToken(effectiveCts);
+                }
+                finally
+                {
+                    // Store reference to document for potential closing before cleaning up _document field
+                    var documentToClose = _document;
+                    
+                    // Clean up on UI thread
+                    _document = null;
+                    await RevitTestInfrastructure.RevitTask.Run(app =>
+                    {
+                        if (_transactionGroup != null)
+                        {
+                            try
+                            {
+                                // Rollback the transaction group
+                                _transactionGroup.RollBack();
+                            }
+                            catch (Exception ex)
+                            {
+                                var unwrappedException = UnwrapException(ex);
+                                Logger.LogError(unwrappedException, "Error rolling back transaction group");
+                            }
+                            finally
+                            {
+                                _transactionGroup.Dispose();
+                            }
+                        }
+                        
+                        // Close the model if CloseModel flag is set
+                        if (_configuration.CloseModel && documentToClose != null)
+                        {
+                            try
+                            {
+                                Logger.LogInformation($"Closing model '{documentToClose.Title}' as requested by CloseModel flag");
+                                documentToClose.Close(false); // Close without saving
+                            }
+                            catch (Exception ex)
+                            {
+                                var unwrappedException = UnwrapException(ex);
+                                Logger.LogError(unwrappedException, "Error closing model");
+                                // Don't throw here - this is cleanup, and we don't want to mask test results
+                            }
+                        }
+                    });
+                    
+                    if (Debugger.IsAttached)
+                    {
+                        Logger.LogDebug($"Completed test '{methodName}' cleanup");
+                    }
+                }
+            }, effectiveCts.Token);
+        }
+        catch (OperationCanceledException) when (timeoutCts?.Token.IsCancellationRequested == true)
+        {
+            // This was a timeout cancellation
+            var timeoutException = new TimeoutException($"Test '{TestCase.TestMethod.Method.Name}' timed out after {_configuration.Timeout}ms");
+            _aggregator.Add(timeoutException);
+            Logger.LogError($"Test '{TestCase.TestMethod.Method.Name}' timed out after {_configuration.Timeout}ms");
+            return new RunSummary { Failed = 1, Total = 1 };
+        }
+        finally
+        {
+            timeoutCts?.Dispose();
+            combinedCts?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Runs the test with the effective cancellation token by temporarily replacing the instance's CancellationTokenSource
+    /// </summary>
+    private async Task<RunSummary> RunTestWithEffectiveCancellationToken(CancellationTokenSource effectiveCts)
+    {
+        // Store the original CancellationTokenSource
+        var originalCts = CancellationTokenSource;
+        
+        try
+        {
+            // Temporarily replace the CancellationTokenSource with our effective one (that includes timeout)
+            // This is a bit of a hack, but necessary since XunitTestCaseRunner doesn't allow us to override the CTS
+            var ctsField = typeof(XunitTestCaseRunner).GetField("cancellationTokenSource", 
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            
+            if (ctsField != null)
+            {
+                ctsField.SetValue(this, effectiveCts);
             }
-        });
+            
+            return await base.RunTestAsync();
+        }
+        finally
+        {
+            // Restore the original CancellationTokenSource
+            var ctsField = typeof(XunitTestCaseRunner).GetField("cancellationTokenSource", 
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            
+            if (ctsField != null)
+            {
+                ctsField.SetValue(this, originalCts);
+            }
+        }
     }
 
     /// <summary>
@@ -370,15 +446,15 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
             }
             else if (paramType == typeof(CancellationToken))
             {
-                // Inject CancellationToken from static infrastructure, or default if not available
-                testMethodArguments[i] = RevitTestInfrastructure.CancellationToken ?? CancellationToken.None;
+                // Inject the current effective CancellationToken (could be timeout-combined)
+                testMethodArguments[i] = cancellationTokenSource.Token;
             }
             else if (paramType == typeof(CancellationToken?) || 
                     (paramType.IsGenericType && paramType.GetGenericTypeDefinition() == typeof(Nullable<>) && 
                      Nullable.GetUnderlyingType(paramType) == typeof(CancellationToken)))
             {
-                // Inject nullable CancellationToken from static infrastructure
-                testMethodArguments[i] = RevitTestInfrastructure.CancellationToken;
+                // Inject the current effective CancellationToken (could be timeout-combined)
+                testMethodArguments[i] = cancellationTokenSource.Token;
             }
             else if (!isNullable && testMethodArguments[i] == null)
             {
@@ -447,8 +523,9 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
         try
         {
             Exception? exception = null;
+            long elapsedMilliseconds = 0;
 
-            var result = await RevitTestInfrastructure.RevitTask.Run(app =>
+            await RevitTestInfrastructure.RevitTask.Run(app =>
             {
                 var timer = new Stopwatch();
                 timer.Start();
@@ -470,6 +547,9 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
                         }
                     }
 
+                    // Check for cancellation before executing test
+                    CancellationTokenSource.Token.ThrowIfCancellationRequested();
+
                     // Create test instance
                     var testInstance = Activator.CreateInstance(TestClass, ConstructorArguments);
 
@@ -479,20 +559,18 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
                     // Handle async test methods
                     if (result is Task task)
                     {
-                        task.Wait();
+                        task.Wait(CancellationTokenSource.Token);
                     }
 
                     timer.Stop();
-                    
-                    return timer.ElapsedMilliseconds;
+                    elapsedMilliseconds = timer.ElapsedMilliseconds;
                 }
                 catch (Exception ex)
                 {
                     timer.Stop();
+                    elapsedMilliseconds = timer.ElapsedMilliseconds;
                     // Unwrap TargetInvocationException to get the actual test exception
                     exception = UnwrapException(ex);
-                    
-                    return timer.ElapsedMilliseconds;
                 }
             });
 
@@ -503,11 +581,11 @@ public class RevitUITestRunner(ITest test, IMessageBus messageBus, Type testClas
             }
 
             // Convert milliseconds to seconds
-            return result / 1000m;
+            return elapsedMilliseconds / 1000m;
         }
         catch (OperationCanceledException)
         {
-            aggregator.Add(new TimeoutException($"Test method {TestMethod.Name} timed out after 10 minutes"));
+            aggregator.Add(new TimeoutException($"Test method {TestMethod.Name} timed out"));
             return 0;
         }
     }
