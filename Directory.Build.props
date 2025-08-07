@@ -6,8 +6,17 @@
     
     <!-- Product version - now includes RevitVersion.Minor.Patch format for ALL projects -->
     <Version>$(RevitVersion).0.1</Version>
-    <AssemblyVersion>$(Version)</AssemblyVersion>
-    <FileVersion>$(Version)</FileVersion>
+  </PropertyGroup>
+  
+  <!-- Handle assembly versioning for all projects -->
+  <!-- AssemblyVersion and FileVersion must be numeric-only in all .NET projects -->
+  <PropertyGroup>
+    <!-- Extract numeric part from version (before any prerelease suffix) -->
+    <_VersionParts>$(Version.Split('-')[0])</_VersionParts>
+    
+    <!-- Use numeric version for assembly and file versions -->
+    <AssemblyVersion>$(_VersionParts)</AssemblyVersion>
+    <FileVersion>$(_VersionParts)</FileVersion>
   </PropertyGroup>
   
   <!-- Define which projects are controlled by this props file -->

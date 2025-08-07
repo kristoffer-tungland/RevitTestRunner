@@ -133,14 +133,30 @@ Use commit messages to control version bumps:
 
 ## Technical Details
 
-### Assembly Versioning
-The `RevitXunitAdapter` project is configured to use the build version for its assembly version:
+### Assembly Versioning Strategy
+The solution uses a sophisticated versioning approach to support both semantic versioning and .NET assembly requirements:
+
+**Version Properties:**
+- `Version`: Full semantic version (e.g., `2025.1.0-PullRequest0018.98`)
+- `PackageVersion`: Uses full semantic version for NuGet packages
+- `AssemblyVersion` & `FileVersion`: Numeric-only portion (e.g., `2025.1.0.0`)
+
+**Implementation:**
 ```xml
-<AssemblyVersion>$(Version)</AssemblyVersion>
-<FileVersion>$(Version)</FileVersion>
+<!-- In Directory.Build.props -->
+<Version>$(RevitVersion).0.1</Version>
+
+<!-- Extract numeric part for assembly versions -->
+<_VersionParts>$(Version.Split('-')[0])</_VersionParts>
+<AssemblyVersion>$(_VersionParts)</AssemblyVersion>
+<FileVersion>$(_VersionParts)</FileVersion>
 ```
 
-This allows the test executor to determine the target Revit version dynamically at runtime.
+This approach allows:
+- ? **Semantic versioning** with prerelease identifiers in CI/CD
+- ? **Numeric assembly versions** required by .NET Framework
+- ? **Dynamic version detection** using `Assembly.GetName().Version.Major`
+- ? **NuGet prerelease packages** for testing and staging
 
 ### Revit Process Selection
 The framework follows this logic for connecting to Revit:
