@@ -39,21 +39,32 @@ Each package is specifically compiled for its target Revit version with appropri
 
 ## Test Execution Strategy
 
-### Framework Tests (Included in CI/CD)
-- Tests the test adapter framework itself
-- Unit tests for discovery, execution, and communication logic
-- Does not require Revit installation
+### Framework Validation (Included in CI/CD)
+- **Build Validation**: Ensures all projects compile correctly for each Revit version
+- **Package Creation**: Verifies NuGet packages can be created successfully
+- **Dependency Resolution**: Confirms all NuGet package references resolve correctly
+- **Multi-Version Support**: Validates that the framework builds for all supported Revit versions
 
 ### Revit Integration Tests (Excluded from CI/CD)
 - Located in `MyRevitTestsXunit` project
 - Uses `[RevitFact]` attributes and requires Autodesk Revit installation
-- **Excluded from CI/CD** using `--filter "FullyQualifiedName!~MyRevitTestsXunit"`
+- **Excluded from CI/CD** because GitHub Actions runners don't have Revit installed
 - Should be run locally on developer machines with Revit installed
 
-### Why Exclude Revit Tests?
-- GitHub Actions runners don't have Autodesk Revit installed
-- Revit requires a GUI environment and specific licensing
-- These tests are designed for local development and manual validation
+### Why Exclude Revit Tests from CI/CD?
+1. **No Revit Installation**: GitHub Actions runners don't have Autodesk Revit installed
+2. **Licensing Requirements**: Revit requires specific licensing that's not available in CI/CD environments
+3. **GUI Dependencies**: Revit requires a desktop environment with graphics capabilities
+4. **Resource Intensive**: Revit tests are slower and resource-intensive
+5. **Local Development Focus**: These tests are designed for local development and manual validation
+
+### CI/CD Focus
+The CI/CD pipeline focuses on:
+- ? **Framework Integrity**: Ensuring the test adapter builds correctly
+- ? **Multi-Version Support**: Validating compatibility with multiple Revit versions
+- ? **Package Quality**: Creating proper NuGet packages for distribution
+- ? **Dependency Management**: Ensuring all references resolve correctly
+- ? **Build Consistency**: Confirming reproducible builds across environments
 
 ## Required Secrets
 
@@ -112,13 +123,26 @@ You can control version increments using commit messages:
 
 ### Local Testing with Revit
 To run the full test suite including Revit integration tests:
+
 ```bash
 # Run all tests locally (requires Revit installation)
 dotnet test RevitTestRunner.sln --configuration Release
 
-# Run only framework tests (no Revit required)
-dotnet test RevitTestRunner.sln --configuration Release --filter "FullyQualifiedName!~MyRevitTestsXunit"
+# Run only integration tests
+dotnet test MyRevitTestsXunit/MyRevitTestsXunit.csproj --configuration Release
+
+# Or use the provided PowerShell script with more options:
+.\run-local-tests.ps1                    # Run all tests for all Revit versions
+.\run-local-tests.ps1 -FrameworkOnly     # Test framework without Revit
+.\run-local-tests.ps1 -IntegrationOnly   # Test only Revit integration
+.\run-local-tests.ps1 -RevitVersions @("2025")  # Test specific version
 ```
+
+**Prerequisites for Integration Tests:**
+- Autodesk Revit 2025+ installed locally
+- Valid Revit license
+- Desktop environment (not headless)
+- .NET 8.0 SDK
 
 ## Package Consumption
 
