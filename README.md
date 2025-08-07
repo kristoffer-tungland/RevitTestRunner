@@ -9,8 +9,8 @@
 
 | Revit Version | NuGet Package | Status |
 |---------------|---------------|--------|
-| 2025 | [![NuGet RevitXunit.TestAdapter](https://img.shields.io/nuget/v/RevitXunit.TestAdapter?logo=nuget&label=2025&color=blue&versionPrefix=2025.1.0)](https://www.nuget.org/packages/RevitXunit.TestAdapter/2025.1.0#readme-body-tab) | ✓ Supported |
-| 2026 | [![NuGet RevitXunit.TestAdapter](https://img.shields.io/nuget/v/RevitXunit.TestAdapter?logo=nuget&label=2026&color=green&versionPrefix=2026.1.0)](https://www.nuget.org/packages/RevitXunit.TestAdapter/) | ✓ Supported |
+| 2025 | [![NuGet](https://img.shields.io/badge/nuget-2025.1.0-blue?logo=nuget)](https://www.nuget.org/packages/RevitXunit.TestAdapter/2025.1.0) | ✓ Supported |
+| 2026 | [![NuGet](https://img.shields.io/badge/nuget-2026.1.0-green?logo=nuget)](https://www.nuget.org/packages/RevitXunit.TestAdapter/2026.1.0) | ✓ Supported |
 
 
 **RevitXunit.TestAdapter** is a powerful xUnit test adapter that enables seamless integration testing of Autodesk Revit add-ins directly within the Revit environment. Write standard xUnit tests that automatically load Revit models, access the full Revit API, and execute inside a running Revit instance while reporting results back to Visual Studio Test Explorer or your CI/CD pipeline. Perfect for BIM developers who need reliable, automated testing of Revit functionality without the complexity of manual testing workflows.
