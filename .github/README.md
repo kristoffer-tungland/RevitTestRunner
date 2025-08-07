@@ -23,7 +23,7 @@ Each package is specifically compiled for its target Revit version with appropri
 - Runs in parallel for each Revit version (2025, 2026)
 - Restores NuGet packages with version-specific dependencies
 - Builds the entire solution with `/p:RevitVersion=<version>`
-- Runs tests for each Revit version
+- Runs framework tests (excluding Revit integration tests)
 - Packs version-specific NuGet packages
 - Uses GitVersion for automatic semantic versioning with Revit-specific format
 
@@ -36,6 +36,24 @@ Each package is specifically compiled for its target Revit version with appropri
 - Publishes version-specific NuGet packages to the public NuGet.org feed
 - Only triggered when creating a GitHub release
 - Runs in parallel for each Revit version
+
+## Test Execution Strategy
+
+### Framework Tests (Included in CI/CD)
+- Tests the test adapter framework itself
+- Unit tests for discovery, execution, and communication logic
+- Does not require Revit installation
+
+### Revit Integration Tests (Excluded from CI/CD)
+- Located in `MyRevitTestsXunit` project
+- Uses `[RevitFact]` attributes and requires Autodesk Revit installation
+- **Excluded from CI/CD** using `--filter "FullyQualifiedName!~MyRevitTestsXunit"`
+- Should be run locally on developer machines with Revit installed
+
+### Why Exclude Revit Tests?
+- GitHub Actions runners don't have Autodesk Revit installed
+- Revit requires a GUI environment and specific licensing
+- These tests are designed for local development and manual validation
 
 ## Required Secrets
 
@@ -92,6 +110,16 @@ You can control version increments using commit messages:
 2. Create a new GitHub release with a version tag (e.g., `v1.0.0`)
 3. The workflow will build and publish packages for both Revit versions to both GitHub Package Registry and NuGet.org
 
+### Local Testing with Revit
+To run the full test suite including Revit integration tests:
+```bash
+# Run all tests locally (requires Revit installation)
+dotnet test RevitTestRunner.sln --configuration Release
+
+# Run only framework tests (no Revit required)
+dotnet test RevitTestRunner.sln --configuration Release --filter "FullyQualifiedName!~MyRevitTestsXunit"
+```
+
 ## Package Consumption
 
 ### From GitHub Package Registry (for testing)
@@ -138,6 +166,11 @@ To add support for a new Revit version (e.g., 2027):
 - Check that the package ID doesn't conflict with existing packages
 - Ensure you have permissions to publish to the target feed
 - Verify all Revit-specific packages are being generated correctly
+
+### Test Execution Issues
+- **Framework tests failing**: Check unit test logic and dependencies
+- **Want to run Revit tests**: These must be run locally with Revit installed
+- **Filter not working**: Verify the filter syntax matches your project structure
 
 ### Version Issues
 - Review the GitVersion configuration in `GitVersion.yml`

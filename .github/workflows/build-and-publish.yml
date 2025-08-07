@@ -88,8 +88,10 @@ jobs:
     - name: Build solution
       run: dotnet build ${{ env.SOLUTION_FILE }} --configuration Release --no-restore /p:RevitVersion=${{ matrix.revit-version }} /p:Version=${{ steps.revit-version.outputs.revit-specific-version }}
     
-    - name: Run tests
-      run: dotnet test ${{ env.SOLUTION_FILE }} --configuration Release --no-build --verbosity normal --logger trx --results-directory TestResults-${{ matrix.revit-version }} /p:RevitVersion=${{ matrix.revit-version }}
+    - name: Run tests (excluding Revit tests)
+      run: |
+        echo "Running tests for Revit ${{ matrix.revit-version }} (excluding MyRevitTestsXunit which requires Revit installation)"
+        dotnet test ${{ env.SOLUTION_FILE }} --configuration Release --no-build --verbosity normal --logger trx --results-directory TestResults-${{ matrix.revit-version }} /p:RevitVersion=${{ matrix.revit-version }} --filter "FullyQualifiedName!~MyRevitTestsXunit"
     
     - name: Upload test results
       uses: actions/upload-artifact@v4
