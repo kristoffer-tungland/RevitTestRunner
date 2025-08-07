@@ -41,7 +41,7 @@ public class CancellationTokenTests
         Thread.Sleep(2000);
         
         // This assertion should never be reached due to timeout
-        Assert.True(false, "This test should have timed out before reaching this assertion");
+        Assert.Fail("This test should have timed out before reaching this assertion");
     }
 
     /// <summary>
@@ -61,7 +61,7 @@ public class CancellationTokenTests
             // Safety check - if we somehow run longer than 2 seconds, fail the test
             if ((DateTime.UtcNow - startTime).TotalSeconds > 2)
             {
-                Assert.True(false, "Test ran too long - timeout mechanism failed");
+                Assert.Fail("Test ran too long - timeout mechanism failed");
                 break;
             }
         }
