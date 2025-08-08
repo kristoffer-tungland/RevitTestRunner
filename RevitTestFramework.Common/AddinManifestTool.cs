@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace RevitTestFramework.Common;
 
@@ -16,7 +17,7 @@ public static class AddinManifestTool
     /// <param name="outputDirectory">Directory where to save the addin manifest file</param>
     /// <param name="assemblyPath">Path to the RevitAddin.Xunit assembly</param>
     /// <param name="useFixedGuids">Whether to use fixed GUIDs for consistent identification</param>
-    /// <param name="assemblyVersion">Assembly version to use (if null, extracts from assembly). Format: RevitVersion.Minor.Patch (e.g., "2025.0.0")</param>
+    /// <param name="assemblyVersion">Assembly version to use (if null, extracts from assembly). Format: RevitVersion.Minor.Patch (e.g., "2025.0.0") or pre-release (e.g., "2025.1.0-pullrequest0018.103")</param>
     public static void GenerateXunitAddinManifest(
         string outputDirectory, 
         string? assemblyPath = null,
@@ -31,16 +32,19 @@ public static class AddinManifestTool
             assemblyVersion = GetAssemblyVersion(assemblyPath);
         }
         
+        // Normalize the version for use in paths and manifests
+        string normalizedVersion = NormalizeVersionForAssembly(assemblyVersion);
+        
         // Create version-specific directory and copy assemblies
-        string versionedOutputDir = Path.Combine(outputDirectory, $"RevitTestFramework.v{assemblyVersion}");
+        string versionedOutputDir = Path.Combine(outputDirectory, $"RevitTestFramework.v{normalizedVersion}");
         Directory.CreateDirectory(versionedOutputDir);
         
         // Copy the assembly and its dependencies to the versioned output directory
         string versionedAssemblyPath = CopyAssemblyWithDependencies(assemblyPath, versionedOutputDir);
         
-        string addinName = $"RevitTestFramework Xunit v{assemblyVersion}";
+        string addinName = $"RevitTestFramework Xunit v{normalizedVersion}";
         
-        // Generate version-specific GUID
+        // Generate version-specific GUID using original version for uniqueness
         Guid versionSpecificGuid = useFixedGuids ? 
             GenerateVersionSpecificGuid(XunitBaseGuid, assemblyVersion) : 
             Guid.NewGuid();
@@ -52,27 +56,40 @@ public static class AddinManifestTool
             "RevitTestFramework",
             addinName,
             versionSpecificGuid,
-            assemblyVersion
+            normalizedVersion
         );
+    }
+
+    /// <summary>
+    /// Normalizes a version string to be compatible with .NET assembly versions
+    /// Converts pre-release versions like "2025.1.0-pullrequest0018.109" to "2025.1.0.0018109"
+    /// Always produces 4-part versions for consistency.
+    /// </summary>
+    /// <param name="version">Original version string</param>
+    /// <returns>Normalized version suitable for assembly versions (always 4-part)</returns>
+    public static string NormalizeVersionForAssembly(string version)
+    {
+        // For assembly versions, we always want 4-part versions for consistency
+        return RevitTestFramework.Contracts.VersionNormalizationUtils.NormalizeVersion(version);
     }
 
     /// <summary>
     /// Gets the assembly version from an assembly file
     /// </summary>
     /// <param name="assemblyPath">Path to the assembly</param>
-    /// <returns>The formatted assembly version (e.g., "2025.0.0")</returns>
+    /// <returns>The formatted assembly version (e.g., "2025.0.0.0")</returns>
     private static string GetAssemblyVersion(string assemblyPath)
     {
         try
         {
             var assembly = Assembly.LoadFrom(assemblyPath);
             var version = assembly.GetName().Version;
-            return version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "2025.0.0";
+            return version != null ? $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}" : "2025.0.0.0";
         }
         catch
         {
             // Fallback to default version if assembly cannot be loaded
-            return "2025.0.0";
+            return "2025.0.0.0";
         }
     }
 
@@ -107,24 +124,19 @@ public static class AddinManifestTool
 
     /// <summary>
     /// Generate a version-specific GUID by combining the base GUID with the version
+    /// Uses the full original version string (including pre-release info) for maximum uniqueness
     /// </summary>
     private static Guid GenerateVersionSpecificGuid(Guid baseGuid, string version)
     {
-        // Convert version to a numeric value by removing dots and converting to an integer
-        string numericVersion = version.Replace(".", "");
-        int versionValue;
-        if (!int.TryParse(numericVersion, out versionValue))
-        {
-            // Handle non-numeric parts in version (e.g., 1.0.0-beta)
-            versionValue = version.GetHashCode();
-        }
+        // Use hash of the full version string for consistent GUID generation
+        int versionHash = version.GetHashCode();
         
         // Get the bytes of the base GUID
         byte[] bytes = baseGuid.ToByteArray();
         
-        // Modify last 4 bytes with the version value to ensure uniqueness
-        byte[] versionBytes = BitConverter.GetBytes(versionValue);
-        for (int i = 0; i < 4 && i < versionBytes.Length; i++)
+        // Modify last 4 bytes with the version hash to ensure uniqueness
+        byte[] versionBytes = BitConverter.GetBytes(versionHash);
+        for (int i = 0; i < 4; i++)
         {
             bytes[bytes.Length - 1 - i] = versionBytes[i];
         }

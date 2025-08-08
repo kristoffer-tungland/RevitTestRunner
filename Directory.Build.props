@@ -14,9 +14,21 @@
     <!-- Extract numeric part from version (before any prerelease suffix) -->
     <_VersionParts>$(Version.Split('-')[0])</_VersionParts>
     
-    <!-- Use numeric version for assembly and file versions -->
-    <AssemblyVersion>$(_VersionParts)</AssemblyVersion>
-    <FileVersion>$(_VersionParts)</FileVersion>
+    <!-- For pre-release versions, normalize to a 4-part numeric version -->
+    <_IsPreRelease Condition="$(Version.Contains('-'))">true</_IsPreRelease>
+    <_IsPreRelease Condition="!$(Version.Contains('-'))">false</_IsPreRelease>
+    
+    <!-- Extract prerelease section and convert to numeric -->
+    <_PreReleaseSection Condition="'$(_IsPreRelease)' == 'true'">$(Version.Split('-')[1])</_PreReleaseSection>
+    
+    <!-- Use normalized version for assembly and file versions -->
+    <AssemblyVersion Condition="'$(_IsPreRelease)' == 'false'">$(_VersionParts).0</AssemblyVersion>
+    <FileVersion Condition="'$(_IsPreRelease)' == 'false'">$(_VersionParts).0</FileVersion>
+    
+    <!-- For pre-release versions, we'll let the build process handle normalization -->
+    <!-- The revision number will be calculated from the pre-release identifier -->
+    <AssemblyVersion Condition="'$(_IsPreRelease)' == 'true'">$(_VersionParts).1</AssemblyVersion>
+    <FileVersion Condition="'$(_IsPreRelease)' == 'true'">$(_VersionParts).1</FileVersion>
   </PropertyGroup>
   
   <!-- Define which projects are controlled by this props file -->
