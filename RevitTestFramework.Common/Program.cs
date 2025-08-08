@@ -85,17 +85,20 @@ namespace RevitTestFramework.Common
         private static string GetAssemblyVersion()
         {
             var version = Assembly.GetExecutingAssembly().GetName().Version;
-            return version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "2025.0.0";
+            return version != null ? $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}" : "2025.0.0.0";
         }
 
         /// <summary>
         /// Extracts the Revit version from the assembly version (first part of version string)
+        /// Handles both standard versions (e.g., "2025.0.0") and pre-release versions (e.g., "2025.1.0-pullrequest0018.103")
         /// </summary>
-        /// <param name="assemblyVersion">Assembly version in format RevitVersion.Minor.Patch (e.g., "2025.0.0")</param>
+        /// <param name="assemblyVersion">Assembly version in format RevitVersion.Minor.Patch (e.g., "2025.0.0") or pre-release format</param>
         /// <returns>The Revit version (e.g., "2025")</returns>
         private static string ExtractRevitVersionFromAssemblyVersion(string assemblyVersion)
         {
-            var parts = assemblyVersion.Split('.');
+            // Handle pre-release versions by extracting base version first
+            string baseVersion = assemblyVersion.Split('-')[0];
+            var parts = baseVersion.Split('.');
             return parts.Length > 0 ? parts[0] : "2025";
         }
     }
