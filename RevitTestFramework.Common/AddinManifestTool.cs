@@ -63,82 +63,15 @@ public static class AddinManifestTool
     /// <summary>
     /// Normalizes a version string to be compatible with .NET assembly versions
     /// Converts pre-release versions like "2025.1.0-pullrequest0018.109" to "2025.1.0.0018109"
+    /// Always produces 4-part versions for consistency.
     /// </summary>
     /// <param name="version">Original version string</param>
-    /// <returns>Normalized version suitable for assembly versions</returns>
+    /// <returns>Normalized version suitable for assembly versions (always 4-part)</returns>
     public static string NormalizeVersionForAssembly(string version)
     {
-        if (string.IsNullOrEmpty(version))
-            return "2025.0.0.0";
-
-        // Extract the base version (before any pre-release suffix)
-        string baseVersion = version.Split('-')[0];
-        
-        // If it's already a standard version, ensure it has 4 parts
-        if (!version.Contains('-'))
-        {
-            var parts = baseVersion.Split('.');
-            return parts.Length switch
-            {
-                1 => $"{parts[0]}.0.0.0",
-                2 => $"{parts[0]}.{parts[1]}.0.0",
-                3 => $"{parts[0]}.{parts[1]}.{parts[2]}.0",
-                _ => baseVersion
-            };
-        }
-
-        // Handle pre-release versions
-        string preReleaseSection = version.Substring(baseVersion.Length + 1); // Skip the '-'
-        
-        // Extract numeric values from the pre-release section
-        var numbers = Regex.Matches(preReleaseSection, @"\d+")
-                          .Cast<Match>()
-                          .Select(m => m.Value)
-                          .ToArray();
-        
-        // Combine numbers into a single revision number
-        // .NET Version revision field is a 16-bit integer (max 65535)
-        // We'll allow up to 5 digits but validate the result doesn't exceed 65535
-        string revisionNumber = "0";
-        if (numbers.Length > 0)
-        {
-            // Combine all numbers into a single string
-            string combined = string.Join("", numbers);
-            
-            // Parse and validate it fits in a 16-bit integer
-            if (!string.IsNullOrEmpty(combined) && int.TryParse(combined, out int revisionValue))
-            {
-                if (revisionValue <= 65535)
-                {
-                    revisionNumber = revisionValue.ToString();
-                }
-                else
-                {
-                    // If too large, take a hash to ensure uniqueness while staying within limits
-                    revisionNumber = Math.Abs(combined.GetHashCode() % 65535).ToString();
-                }
-            }
-            else
-            {
-                // If parsing fails or empty, use hash of the pre-release section
-                revisionNumber = Math.Abs(preReleaseSection.GetHashCode() % 65535).ToString();
-            }
-        }
-        
-        // Ensure it's not zero
-        if (revisionNumber == "0")
-            revisionNumber = "1";
-        
-        // Ensure base version has 3 parts
-        var baseParts = baseVersion.Split('.');
-        string normalizedBase = baseParts.Length switch
-        {
-            1 => $"{baseParts[0]}.0.0",
-            2 => $"{baseParts[0]}.{baseParts[1]}.0",
-            _ => $"{baseParts[0]}.{baseParts[1]}.{baseParts[2]}"
-        };
-        
-        return $"{normalizedBase}.{revisionNumber}";
+        // For assembly versions, we always want 4-part versions for consistency
+        // Default revision for pre-release is "1" to distinguish from standard versions
+        return RevitTestFramework.Contracts.VersionNormalizationUtils.NormalizeVersion(version, defaultRevisionForPrerelease: "1");
     }
 
     /// <summary>

@@ -460,7 +460,6 @@ public static class PipeClientHelper
     {
         logger?.LogInformation("PipeClientHelper: Waiting for Revit test infrastructure to initialize...");
 
-// Added pre-release support - revision check
         int waitTimeMs = 0;
         const int pollIntervalMs = 1000;
 
@@ -474,17 +473,8 @@ public static class PipeClientHelper
 
             try
             {
-                // Try to construct the pipe name for this process
-                var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                var version = assembly.GetName().Version;
-                var assemblyVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "2025.0.0";
-                
-                // Handle potential pre-release versions
-                if (version != null && version.Revision != 0)
-                {
-                    assemblyVersion = $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
-                }
-
+                // Get the normalized assembly version using shared logic
+                var assemblyVersion = GetCurrentAssemblyVersion();
                 var pipeName = PipeNaming.GetPipeName(assemblyVersion, revitProcess.Id);
 
                 logger?.LogInformation($"PipeClientHelper: Checking for pipe availability: '{pipeName}'");
@@ -525,18 +515,8 @@ public static class PipeClientHelper
         {
             logger?.LogInformation($"PipeClientHelper: Checking if Revit addin is installed for version {revitVersion}");
 
-            // Get the assembly version to construct the correct manifest filename
-            var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-            var version = assembly.GetName().Version;
-            var rawAssemblyVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "2025.0.0";
-            
-            // Handle potential pre-release versions by checking for revision number
-            var normalizedVersion = rawAssemblyVersion;
-            if (version != null && version.Revision != 0)
-            {
-                // This is likely a normalized pre-release version, include the revision
-                normalizedVersion = $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
-            }
+            // Get the normalized assembly version using shared logic
+            var normalizedVersion = GetCurrentAssemblyVersion();
 
             // Construct the manifest file path
             var addinDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), 
@@ -561,7 +541,8 @@ public static class PipeClientHelper
             }
 
             // Run the tool to generate the addin manifest
-            var arguments = $"generate-manifest --output \"{addinDir}\" --assembly-version \"{normalizedVersion}\"";
+            // Note: We no longer pass --assembly-version since the tool auto-detects from assembly filename
+            var arguments = $"generate-manifest --output \"{addinDir}\"";
             logger?.LogInformation($"PipeClientHelper: Running addin installation: {commonTool} {arguments}");
 
             var psi = new ProcessStartInfo
@@ -803,18 +784,10 @@ public static class PipeClientHelper
     {
         try
         {
-            // Construct pipe name using the current assembly version
-            var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-            var version = assembly.GetName().Version;
-            var assemblyVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "2025.0.0";
-            
-            // Handle potential pre-release versions
-            if (version != null && version.Revision != 0)
-            {
-                assemblyVersion = $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
-            }
-
+            // Get the normalized assembly version using shared logic
+            var assemblyVersion = GetCurrentAssemblyVersion();
             var pipeName = PipeNaming.GetPipeName(assemblyVersion, processId);
+            
             logger?.LogInformation($"PipeClientHelper: Attempting to connect to pipe: {pipeName}");
 
             var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
@@ -878,5 +851,27 @@ public static class PipeClientHelper
             logger.LogError($"PipeClientHelper: Error in SendCommandStreaming: {ex.Message}");
             throw;
         }
+    }
+
+    /// <summary>
+    /// Gets the normalized assembly version for the current executing assembly
+    /// Uses the shared VersionNormalization utility for consistency
+    /// </summary>
+    /// <returns>Normalized assembly version string suitable for pipe names and manifest files</returns>
+    private static string GetCurrentAssemblyVersion()
+    {
+        var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+        var version = assembly.GetName().Version;
+        var assemblyVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "2025.0.0";
+        
+        // Handle potential pre-release versions by checking for revision number
+        if (version != null && version.Revision != 0)
+        {
+            // This is likely a normalized pre-release version, include the revision
+            assemblyVersion = $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
+        }
+
+        // Use the shared normalization utility to ensure consistency (always 4-part versions)
+        return VersionNormalizationUtils.NormalizeVersion(assemblyVersion, defaultRevisionForPrerelease: "1");
     }
 }
