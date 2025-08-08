@@ -70,8 +70,7 @@ public static class AddinManifestTool
     public static string NormalizeVersionForAssembly(string version)
     {
         // For assembly versions, we always want 4-part versions for consistency
-        // Default revision for pre-release is "1" to distinguish from standard versions
-        return RevitTestFramework.Contracts.VersionNormalizationUtils.NormalizeVersion(version, defaultRevisionForPrerelease: "1");
+        return RevitTestFramework.Contracts.VersionNormalizationUtils.NormalizeVersion(version);
     }
 
     /// <summary>

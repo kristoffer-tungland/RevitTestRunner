@@ -10,11 +10,11 @@ public static class VersionNormalizationUtils
 {
     /// <summary>
     /// Normalizes a version string to always produce a 4-part version format
+    /// Uses "1" as the default revision for pre-release versions when no numbers are found
     /// </summary>
     /// <param name="version">Original version string</param>
-    /// <param name="defaultRevisionForPrerelease">Default revision number for pre-release versions when no numbers found</param>
     /// <returns>Normalized version string (always 4-part format)</returns>
-    public static string NormalizeVersion(string version, string defaultRevisionForPrerelease = "1")
+    public static string NormalizeVersion(string version)
     {
         if (string.IsNullOrEmpty(version))
             return "2025.0.0.0";
@@ -79,9 +79,9 @@ public static class VersionNormalizationUtils
             revisionNumber = Math.Abs(preReleaseSection.GetHashCode() % 65535).ToString();
         }
         
-        // Ensure it's not zero for pre-release versions
+        // Ensure it's not zero for pre-release versions (use "1" as default)
         if (revisionNumber == "0")
-            revisionNumber = defaultRevisionForPrerelease;
+            revisionNumber = "1";
         
         // Ensure base version has 3 parts
         var baseParts = baseVersion.Split('.');
@@ -126,7 +126,7 @@ public static class PipeNaming
     /// <returns>The formatted pipe name using the current assembly version and process ID</returns>
     public static string GetCurrentProcessPipeName()
     {
-        var assemblyVersion = GetFormattedAssemblyVersion(Assembly.GetExecutingAssembly());
+        var assemblyVersion = GetCurrentAssemblyVersion();
         return GetPipeName(assemblyVersion, Environment.ProcessId);
     }
 
@@ -151,7 +151,7 @@ public static class PipeNaming
     public static string NormalizeVersionForPipe(string version)
     {
         // Always use 4-part versions for consistency
-        return VersionNormalizationUtils.NormalizeVersion(version, defaultRevisionForPrerelease: "1");
+        return VersionNormalizationUtils.NormalizeVersion(version);
     }
 
     /// <summary>
@@ -161,12 +161,21 @@ public static class PipeNaming
     /// </summary>
     /// <param name="assembly">The assembly to get the version from</param>
     /// <returns>The formatted version string (always 4-part, e.g., "2025.0.0.0" or "2025.1.0.18103")</returns>
-    private static string GetFormattedAssemblyVersion(Assembly assembly)
+    public static string GetFormattedAssemblyVersion(Assembly assembly)
     {
         var version = assembly.GetName().Version;
         if (version == null) return "2025.0.0.0";
         
         // Always return 4-part version for consistency
         return $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
+    }
+
+    /// <summary>
+    /// Gets the formatted assembly version for the current executing assembly
+    /// </summary>
+    /// <returns>The formatted version string (always 4-part, e.g., "2025.0.0.0" or "2025.1.0.18103")</returns>
+    public static string GetCurrentAssemblyVersion()
+    {
+        return GetFormattedAssemblyVersion(Assembly.GetExecutingAssembly());
     }
 }

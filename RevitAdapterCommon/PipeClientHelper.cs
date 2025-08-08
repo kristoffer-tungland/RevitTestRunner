@@ -860,18 +860,10 @@ public static class PipeClientHelper
     /// <returns>Normalized assembly version string suitable for pipe names and manifest files</returns>
     private static string GetCurrentAssemblyVersion()
     {
-        var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-        var version = assembly.GetName().Version;
-        var assemblyVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "2025.0.0";
-        
-        // Handle potential pre-release versions by checking for revision number
-        if (version != null && version.Revision != 0)
-        {
-            // This is likely a normalized pre-release version, include the revision
-            assemblyVersion = $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
-        }
+        // Get the raw 4-part version from the shared utility
+        var assemblyVersion = PipeNaming.GetCurrentAssemblyVersion();
 
         // Use the shared normalization utility to ensure consistency (always 4-part versions)
-        return VersionNormalizationUtils.NormalizeVersion(assemblyVersion, defaultRevisionForPrerelease: "1");
+        return VersionNormalizationUtils.NormalizeVersion(assemblyVersion);
     }
 }
