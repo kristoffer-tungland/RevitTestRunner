@@ -75,16 +75,16 @@ public static class AddinManifestTool
 
     /// <summary>
     /// Gets the assembly version from an assembly file
+    /// This includes the full version string with pre-release information
     /// </summary>
     /// <param name="assemblyPath">Path to the assembly</param>
-    /// <returns>The formatted assembly version (e.g., "2025.0.0.0")</returns>
+    /// <returns>The informational version string (e.g., "2025.1.1-pullrequest0020.10")</returns>
     private static string GetAssemblyVersion(string assemblyPath)
     {
         try
         {
             var assembly = Assembly.LoadFrom(assemblyPath);
-            var version = assembly.GetName().Version;
-            return version != null ? $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}" : "2025.0.0.0";
+            return RevitTestFramework.Contracts.PipeNaming.GetAssemblyInformationalVersion(assembly);
         }
         catch
         {

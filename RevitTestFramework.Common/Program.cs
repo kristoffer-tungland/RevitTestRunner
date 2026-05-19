@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
+using RevitTestFramework.Contracts;
 
 namespace RevitTestFramework.Common
 {
@@ -63,24 +64,35 @@ namespace RevitTestFramework.Common
         {
             string? assemblyPath = GetOptionOrDefault(options, "assembly", (string?)null);
             
-            // Always auto-extract version from assembly filename if assembly is provided
+            // Always auto-extract version from assembly if assembly is provided
             string? assemblyVersion = null;
             if (!string.IsNullOrEmpty(assemblyPath))
             {
-                string assemblyName = Path.GetFileNameWithoutExtension(assemblyPath);
-                string? extractedVersion = ExtractVersionFromAssemblyName(assemblyName);
+                // Try to get version from the assembly's informational version attribute first
+                assemblyVersion = GetVersionFromAssembly(assemblyPath);
                 
-                if (!string.IsNullOrEmpty(extractedVersion))
+                if (!string.IsNullOrEmpty(assemblyVersion))
                 {
-                    assemblyVersion = extractedVersion;
-                    Console.WriteLine($"Extracted version from assembly filename: {assemblyVersion}");
+                    Console.WriteLine($"Extracted version from assembly: {assemblyVersion}");
+                }
+                else
+                {
+                    // Fallback to filename parsing if assembly version extraction fails
+                    string assemblyName = Path.GetFileNameWithoutExtension(assemblyPath);
+                    string? extractedVersion = ExtractVersionFromAssemblyName(assemblyName);
+                    
+                    if (!string.IsNullOrEmpty(extractedVersion))
+                    {
+                        assemblyVersion = extractedVersion;
+                        Console.WriteLine($"Extracted version from assembly filename: {assemblyVersion}");
+                    }
                 }
             }
             
             // If still no version, fall back to current assembly version
             if (string.IsNullOrEmpty(assemblyVersion))
             {
-                assemblyVersion = GetAssemblyVersion();
+                assemblyVersion = GetAssemblyInformationalVersion();
                 Console.WriteLine($"Using current assembly version: {assemblyVersion}");
             }
             
@@ -132,10 +144,33 @@ namespace RevitTestFramework.Common
                 "Autodesk", "Revit", "Addins", revitVersion);
         }
 
-        private static string GetAssemblyVersion()
+        /// <summary>
+        /// Gets the informational version from an assembly file
+        /// This includes the full version string with pre-release information
+        /// </summary>
+        /// <param name="assemblyPath">Path to the assembly</param>
+        /// <returns>The informational version string, or null if not found</returns>
+        private static string? GetVersionFromAssembly(string assemblyPath)
         {
-            var version = Assembly.GetExecutingAssembly().GetName().Version;
-            return version != null ? $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}" : "2025.0.0.0";
+            try
+            {
+                var assembly = Assembly.LoadFrom(assemblyPath);
+                return PipeNaming.GetAssemblyInformationalVersion(assembly);
+            }
+            catch
+            {
+                // Return null if assembly cannot be loaded or version cannot be extracted
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Gets the informational version for the current executing assembly
+        /// </summary>
+        /// <returns>The informational version string</returns>
+        private static string GetAssemblyInformationalVersion()
+        {
+            return PipeNaming.GetCurrentAssemblyInformationalVersion();
         }
 
         /// <summary>

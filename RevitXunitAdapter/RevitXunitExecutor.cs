@@ -71,6 +71,8 @@ namespace RevitXunitAdapter
                     Debug = Debugger.IsAttached
                 };
 
+                frameworkHandle.SendMessage(TestMessageLevel.Informational, $"RevitXunitExecutor: Cancel pipe name: {command.CancelPipe}");
+
                 if (command.Debug)
                 {
                     frameworkHandle.SendMessage(TestMessageLevel.Informational, "RevitXunitExecutor: Debugger detected - enabling debug mode for Revit test execution");

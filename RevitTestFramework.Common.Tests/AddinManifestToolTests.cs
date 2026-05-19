@@ -91,6 +91,7 @@ namespace RevitTestFramework.Common.Tests
         [Theory]
         [InlineData("2025.1.0-pullrequest0018.103", "2025.1.0.18103")]
         [InlineData("2025.1.0-pullrequest0018.109", "2025.1.0.18109")]
+        [InlineData("2025.1.0-pullrequest0020.10+2037f64c48400bf96c4d3f9f85d1ea3486211a2f", "2025.1.0.2010")]
         [InlineData("2025.0.0-alpha.1", "2025.0.0.1")]
         [InlineData("2026.2.5-beta0042.999", "2026.2.5.42999")]
         [InlineData("2025.1.0", "2025.1.0.0")]  // Now expects 4-part version

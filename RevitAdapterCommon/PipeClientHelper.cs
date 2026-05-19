@@ -519,7 +519,7 @@ public static class PipeClientHelper
             var normalizedVersion = GetCurrentAssemblyVersion();
 
             // Construct the manifest file path
-            var addinDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), 
+            var addinDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                                       "Autodesk", "Revit", "Addins", revitVersion);
             var manifestFile = Path.Combine(addinDir, $"RevitAddin.Xunit.{normalizedVersion}.addin");
 
@@ -560,7 +560,7 @@ public static class PipeClientHelper
             {
                 string output = process.StandardOutput.ReadToEnd();
                 string error = process.StandardError.ReadToEnd();
-                
+
                 process.WaitForExit();
 
                 if (process.ExitCode == 0)
@@ -602,16 +602,23 @@ public static class PipeClientHelper
     /// <returns>Path to the tool, or null if not found</returns>
     private static string? FindRevitTestFrameworkCommonTool(ILogger? logger)
     {
+        var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+        string assemblyDirectory = Path.GetDirectoryName(assembly.Location) ?? throw new InvalidOperationException("Could not determine assembly location");
+        var informationalVersion = VersionNormalizationUtils.NormalizeVersion(PipeNaming.GetAssemblyInformationalVersion(assembly));
+
         // Try to find RevitTestFramework.Common.exe in various locations
         var searchLocations = new[]
         {
+#if DEBUG
+            // Reletive path to RevitTestFramework.Common in debug mode
+            Path.Combine(assemblyDirectory, "..", "..", "..", "..", "RevitAddin.Xunit", "bin", "Debug", "net8.0"),
+#else
             // Same directory as current assembly
-            Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location),
-            
-            // Common build output locations
-            Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "", "..", "RevitTestFramework.Common"),
-            Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "", "..", "RevitTestFramework.Common", "bin", "Release"),
-            Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "", "..", "RevitTestFramework.Common", "bin", "Debug")
+            assemblyDirectory,
+            // NuGet package location
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), 
+                         ".nuget", "packages", "revitxunit.testadapter", informationalVersion, "content", "RevitAddin")
+#endif
         };
 
         foreach (var location in searchLocations.Where(l => !string.IsNullOrEmpty(l)))
@@ -645,39 +652,28 @@ public static class PipeClientHelper
     /// <returns>Path to the debugger helper, or null if not found</returns>
     private static string? FindDebuggerHelper(ILogger? logger)
     {
-        // Try to find RevitDebuggerHelper.exe in various locations
-        var searchLocations = new[]
+        var configuration = AppDomain.CurrentDomain.BaseDirectory.Contains("Debug", StringComparison.OrdinalIgnoreCase)
+             ? "Debug"
+             : "Release";
+
+        // Look for the helper executable in common locations
+        var helperPaths = new[]
         {
-            // Same directory as current assembly
-            Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location),
-            
-            // Common build output locations
-            Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "", "..", "RevitDebuggerHelper"),
-            Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "", "..", "RevitDebuggerHelper", "bin", "Release"),
-            Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "", "..", "RevitDebuggerHelper", "bin", "Debug")
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "RevitDebuggerHelper.exe"),
+            // Navigate from test assembly location to workspace root, then to helper
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "RevitDebuggerHelper", "bin", configuration, "net48", "RevitDebuggerHelper.exe"),
+            "RevitDebuggerHelper.exe", // Try PATH
         };
 
-        foreach (var location in searchLocations.Where(l => !string.IsNullOrEmpty(l)))
+        foreach (var path in helperPaths)
         {
-            try
+            if (File.Exists(path))
             {
-                if (Directory.Exists(location))
-                {
-                    var helperFiles = Directory.GetFiles(location, "RevitDebuggerHelper*.exe");
-                    if (helperFiles.Length > 0)
-                    {
-                        logger?.LogInformation($"PipeClientHelper: Found RevitDebuggerHelper at: {helperFiles[0]}");
-                        return helperFiles[0];
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                logger?.LogError($"PipeClientHelper: Error searching for debugger helper in {location}: {ex.Message}");
+                logger?.LogInformation($"PipeClientHelper: Found helper at: {path}");
+                return path;
             }
         }
 
-        logger?.LogError("PipeClientHelper: RevitDebuggerHelper.exe not found in any search location");
         return null;
     }
 
@@ -721,7 +717,7 @@ public static class PipeClientHelper
             {
                 logger?.LogError($"PipeClientHelper: Error cleaning up failed Revit process: {ex.Message}");
             }
-            
+
             throw new InvalidOperationException("Revit test infrastructure failed to initialize");
         }
 
@@ -787,14 +783,14 @@ public static class PipeClientHelper
             // Get the normalized assembly version using shared logic
             var assemblyVersion = GetCurrentAssemblyVersion();
             var pipeName = PipeNaming.GetPipeName(assemblyVersion, processId);
-            
+
             logger?.LogInformation($"PipeClientHelper: Attempting to connect to pipe: {pipeName}");
 
             var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
-            
+
             // Try to connect with a reasonable timeout
             client.Connect(5000); // 5 second timeout
-            
+
             logger?.LogInformation($"PipeClientHelper: Successfully connected to Revit process {processId}");
             return new RevitConnectionResult(client, processId);
         }
@@ -814,16 +810,16 @@ public static class PipeClientHelper
     /// <param name="revitVersion">The Revit version to target</param>
     /// <param name="logger">Logger for informational messages</param>
     public static void SendCommandStreaming(
-        object command, 
-        Action<string> onLineReceived, 
-        CancellationToken cancellationToken, 
-        string revitVersion, 
+        object command,
+        Action<string> onLineReceived,
+        CancellationToken cancellationToken,
+        string revitVersion,
         ILogger logger)
     {
         try
         {
             var connection = ConnectOrLaunchRevit(revitVersion, logger);
-            
+
             using (connection.Client)
             {
                 var writer = new StreamWriter(connection.Client) { AutoFlush = true };
@@ -839,9 +835,9 @@ public static class PipeClientHelper
                 {
                     var line = reader.ReadLine();
                     if (line == null) break;
-                    
+
                     onLineReceived(line);
-                    
+
                     if (line == "END") break;
                 }
             }
@@ -855,13 +851,13 @@ public static class PipeClientHelper
 
     /// <summary>
     /// Gets the normalized assembly version for the current executing assembly
-    /// Uses the shared VersionNormalization utility for consistency
+    /// Uses the informational version (includes pre-release info) with shared normalization utility for consistency
     /// </summary>
     /// <returns>Normalized assembly version string suitable for pipe names and manifest files</returns>
     private static string GetCurrentAssemblyVersion()
     {
-        // Get the raw 4-part version from the shared utility
-        var assemblyVersion = PipeNaming.GetCurrentAssemblyVersion();
+        // Get the full informational version (includes pre-release info like "2025.1.1-pullrequest0020.10")
+        var assemblyVersion = PipeNaming.GetCurrentAssemblyInformationalVersion();
 
         // Use the shared normalization utility to ensure consistency (always 4-part versions)
         return VersionNormalizationUtils.NormalizeVersion(assemblyVersion);

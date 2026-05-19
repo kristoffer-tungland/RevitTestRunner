@@ -1,4 +1,5 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -7,24 +8,20 @@
     <IsTestProject>true</IsTestProject>
     <RevitVersion>2025</RevitVersion>
   </PropertyGroup>
-  
   <ItemGroup>
     <!--<PackageReference Include="xunit" Version="2.9.3" />-->
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="System.Management" Version="4.7.0" />
   </ItemGroup>
-
   <ItemGroup>
     <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*" />
     <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*" />
   </ItemGroup>
-  
   <ItemGroup>
     <ProjectReference Include="..\RevitTestFramework.Xunit.Contracts\RevitTestFramework.Xunit.Contracts.csproj" />
     <ProjectReference Include="..\RevitXunitAdapter\RevitXunitAdapter.csproj" />
   </ItemGroup>
-    
   <!-- Include test settings -->
   <ItemGroup>
     <None Include="test.runsettings">

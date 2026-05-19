@@ -1,11 +1,10 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- Common properties and version info are in Directory.Build.props -->
-  
   <!-- Enable copying of all dependency DLLs to output directory -->
   <PropertyGroup>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
-  
   <ItemGroup>
     <PackageReference Include="xunit.runner.utility" Version="2.9.3" />
     <PackageReference Include="xunit.extensibility.execution" Version="2.9.3" />
@@ -14,12 +13,10 @@
     <ProjectReference Include="..\RevitAddin.Common\RevitAddin.Common.csproj" />
     <ProjectReference Include="..\RevitTestFramework.Xunit\RevitTestFramework.Xunit.csproj" />
   </ItemGroup>
-  
   <!-- Include installation script in the build output -->
   <ItemGroup>
     <None Include="Install-RevitXunitAddin.ps1">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
-  
 </Project>

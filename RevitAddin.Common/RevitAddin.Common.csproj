@@ -1,11 +1,10 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
   <!-- Common properties and version info are in Directory.Build.props -->
-  
   <!-- Enable copying of all dependency DLLs to output directory -->
   <PropertyGroup>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
-  
   <ItemGroup>
     <ProjectReference Include="..\RevitTestFramework.Common\RevitTestFramework.Common.csproj" />
     <ProjectReference Include="..\RevitTestFramework.Contracts\RevitTestFramework.Contracts.csproj" />
