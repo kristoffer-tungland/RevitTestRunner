@@ -9,7 +9,6 @@ on:
     types: [ published ]
 
 env:
-  DOTNET_VERSION: '8.0.x'
   SOLUTION_FILE: 'RevitTestRunner.sln'
   PACKAGE_PROJECT: 'RevitXunitAdapter/RevitXunitAdapter.csproj'
 
@@ -19,11 +18,12 @@ jobs:
     
     strategy:
       matrix:
-        revit-version: [2025, 2026]
+        revit-version: [2025, 2026, 2027]
     
     outputs:
       version-2025: ${{ steps.version.outputs.version-2025 }}
       version-2026: ${{ steps.version.outputs.version-2026 }}
+      version-2027: ${{ steps.version.outputs.version-2027 }}
       base-version: ${{ steps.version.outputs.semVer }}
     
     steps:
@@ -35,7 +35,9 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
+        dotnet-version: |
+          8.0.x
+          10.0.x
     
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
@@ -152,7 +154,7 @@ jobs:
     
     strategy:
       matrix:
-        revit-version: [2025, 2026]
+        revit-version: [2025, 2026, 2027]
     
     steps:
     - name: Download NuGet package
@@ -171,7 +173,9 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
+        dotnet-version: |
+          8.0.x
+          10.0.x
     
     - name: Set up NuGet authentication for GitHub Packages
       run: |
@@ -202,7 +206,7 @@ jobs:
     
     strategy:
       matrix:
-        revit-version: [2025, 2026]
+        revit-version: [2025, 2026, 2027]
     
     steps:
     - name: Download NuGet package
@@ -221,7 +225,9 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
+        dotnet-version: |
+          8.0.x
+          10.0.x
     
     - name: Push to NuGet.org
       run: |

@@ -359,12 +359,51 @@ public static class PipeClientHelper
     public record RevitConnectionResult(NamedPipeClientStream Client, int ProcessId);
 
     /// <summary>
-    /// Gets the default Revit executable path for a given version
+    /// Gets the Revit executable path for a given version, first consulting the Windows registry
+    /// and falling back to the conventional default install location.
+    /// Registry layout: HKLM\SOFTWARE\Autodesk\Revit\{year}\REVIT-XX:LLLL → InstallationLocation
     /// </summary>
     /// <param name="revitVersion">The Revit version (e.g., "2025")</param>
     /// <returns>The path to Revit.exe</returns>
     private static string GetRevitExecutablePath(string revitVersion)
     {
+        // Try registry: HKLM\SOFTWARE\Autodesk\Revit\{version}
+        // Subkeys named REVIT-XX:LLLL (product + language code) carry InstallationLocation.
+        string[] registryRoots =
+        [
+            $@"SOFTWARE\Autodesk\Revit\{revitVersion}",
+            $@"SOFTWARE\WOW6432Node\Autodesk\Revit\{revitVersion}"
+        ];
+
+        foreach (var registryPath in registryRoots)
+        {
+            try
+            {
+                using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(registryPath);
+                if (key == null) continue;
+
+                foreach (var subKeyName in key.GetSubKeyNames())
+                {
+                    // Match subkeys like "REVIT-05:0409" (product code : language code)
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(subKeyName, @"^REVIT-\w+:\w+$"))
+                        continue;
+
+                    using var subKey = key.OpenSubKey(subKeyName);
+                    var installLocation = subKey?.GetValue("InstallationLocation") as string;
+                    if (string.IsNullOrEmpty(installLocation)) continue;
+
+                    var candidate = Path.Combine(installLocation, "Revit.exe");
+                    if (File.Exists(candidate))
+                        return candidate;
+                }
+            }
+            catch (Exception)
+            {
+                // Registry access failure — try next root or fall back to default
+            }
+        }
+
+        // Fall back to the conventional default location
         return $@"C:\Program Files\Autodesk\Revit {revitVersion}\Revit.exe";
     }
 

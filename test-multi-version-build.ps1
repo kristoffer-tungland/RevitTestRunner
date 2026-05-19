@@ -2,7 +2,7 @@
 # This script tests building and packaging for multiple Revit versions
 
 param(
-    [string[]]$RevitVersions = @("2025", "2026"),
+    [string[]]$RevitVersions = @("2025", "2026", "2027"),
     [string]$Configuration = "Release"
 )
 
