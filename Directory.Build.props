@@ -5,9 +5,9 @@
     <RevitVersion>2025</RevitVersion>
     
     <!-- Map RevitVersion to .NET target framework -->
-    <!-- Revit 2025 and 2026 use .NET 8; Revit 2027+ uses .NET 10 (Windows-specific TFM required by Revit API packages) -->
+    <!-- Revit 2025 and 2026 use .NET 8 (Windows-specific TFM required by Revit API packages); Revit 2027+ uses .NET 10 -->
     <RevitTargetFramework Condition="'$(RevitVersion)' == '2027'">net10.0-windows7.0</RevitTargetFramework>
-    <RevitTargetFramework Condition="'$(RevitVersion)' != '2027'">net8.0</RevitTargetFramework>
+    <RevitTargetFramework Condition="'$(RevitVersion)' != '2027'">net8.0-windows7.0</RevitTargetFramework>
     
     <!-- Product version - now includes RevitVersion.Minor.Patch format for ALL projects -->
     <Version>$(RevitVersion).1.1-pullrequest0020.10</Version>
