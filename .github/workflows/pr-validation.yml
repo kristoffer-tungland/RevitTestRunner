@@ -33,18 +33,12 @@ jobs:
         dotnet-version: |
           8.0.x
           10.0.x
+        source-url: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+      env:
+        NUGET_AUTH_TOKEN: ${{ github.token }}
     
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
-    
-    - name: Set up NuGet authentication for GitHub Packages
-      run: |
-        # Use the built-in workflow token for package read access during PR validation.
-        dotnet nuget add source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" `
-          --name github `
-          --username ${{ github.actor }} `
-          --password ${{ github.token }} `
-          --store-password-in-clear-text
     
     - name: Cache NuGet packages
       uses: actions/cache@v4

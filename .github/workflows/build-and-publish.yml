@@ -44,6 +44,9 @@ jobs:
         dotnet-version: |
           8.0.x
           10.0.x
+        source-url: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+      env:
+        NUGET_AUTH_TOKEN: ${{ github.token }}
     
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
@@ -90,14 +93,6 @@ jobs:
         echo "Base Version: ${{ steps.version.outputs.semVer }}"
         echo "Revit ${{ matrix.revit-version }} Version: ${{ steps.revit-version.outputs.revit-specific-version }}"
 
-    - name: Set up NuGet authentication for GitHub Packages
-      run: |
-        dotnet nuget add source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" `
-          --name github `
-          --username ${{ github.actor }} `
-          --password ${{ github.token }} `
-          --store-password-in-clear-text
-    
     - name: Restore NuGet packages
       run: dotnet restore ${{ env.SOLUTION_FILE }} /p:RevitVersion=${{ matrix.revit-version }}
     
@@ -193,14 +188,9 @@ jobs:
         dotnet-version: |
           8.0.x
           10.0.x
-    
-    - name: Set up NuGet authentication for GitHub Packages
-      run: |
-        dotnet nuget add source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" `
-          --name github `
-          --username ${{ github.actor }} `
-          --password ${{ github.token }} `
-          --store-password-in-clear-text
+        source-url: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+      env:
+        NUGET_AUTH_TOKEN: ${{ github.token }}
     
     - name: Push to GitHub Package Registry
       run: |
@@ -213,7 +203,7 @@ jobs:
         Write-Host "Publishing $($packages.Count) package(s) to GitHub Package Registry:"
         foreach ($package in $packages) {
           Write-Host "  Publishing: $($package.Name)"
-          dotnet nuget push "$($package.FullName)" --source "github" --api-key "${{ github.token }}" --skip-duplicate
+          dotnet nuget push "$($package.FullName)" --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" --api-key "${{ github.token }}" --skip-duplicate
         }
 
   publish-nuget:
