@@ -8,6 +8,9 @@ on:
   release:
     types: [ published ]
 
+permissions:
+  contents: read
+
 env:
   SOLUTION_FILE: 'RevitTestRunner.sln'
   PACKAGE_PROJECT: 'RevitXunitAdapter/RevitXunitAdapter.csproj'
@@ -15,6 +18,9 @@ env:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: read
+      packages: read
     
     strategy:
       matrix:
@@ -83,6 +89,14 @@ jobs:
       run: |
         echo "Base Version: ${{ steps.version.outputs.semVer }}"
         echo "Revit ${{ matrix.revit-version }} Version: ${{ steps.revit-version.outputs.revit-specific-version }}"
+
+    - name: Set up NuGet authentication for GitHub Packages
+      run: |
+        dotnet nuget add source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" `
+          --name github `
+          --username ${{ github.actor }} `
+          --password ${{ github.token }} `
+          --store-password-in-clear-text
     
     - name: Restore NuGet packages
       run: dotnet restore ${{ env.SOLUTION_FILE }} /p:RevitVersion=${{ matrix.revit-version }}
@@ -150,7 +164,10 @@ jobs:
   publish-github:
     needs: build
     runs-on: windows-latest
-    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: (github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork) || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    permissions:
+      contents: read
+      packages: write
     
     strategy:
       matrix:
@@ -182,7 +199,7 @@ jobs:
         dotnet nuget add source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" `
           --name github `
           --username ${{ github.actor }} `
-          --password ${{ secrets.GH_TOKEN }} `
+          --password ${{ github.token }} `
           --store-password-in-clear-text
     
     - name: Push to GitHub Package Registry
@@ -196,7 +213,7 @@ jobs:
         Write-Host "Publishing $($packages.Count) package(s) to GitHub Package Registry:"
         foreach ($package in $packages) {
           Write-Host "  Publishing: $($package.Name)"
-          dotnet nuget push "$($package.FullName)" --source "github" --api-key "${{ secrets.GH_TOKEN }}" --skip-duplicate
+          dotnet nuget push "$($package.FullName)" --source "github" --api-key "${{ github.token }}" --skip-duplicate
         }
 
   publish-nuget:

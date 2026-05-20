@@ -8,6 +8,10 @@ on:
       - '.github/**'
       - '!.github/workflows/**'
 
+permissions:
+  contents: read
+  packages: read
+
 env:
   SOLUTION_FILE: 'RevitTestRunner.sln'
 
@@ -33,13 +37,13 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
     
-    - name: Set up NuGet authentication for GitHub Packages (for testing)
+    - name: Set up NuGet authentication for GitHub Packages
       run: |
-        # Set up authentication for potential NuGet package testing
+        # Use the built-in workflow token for package read access during PR validation.
         dotnet nuget add source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" `
           --name github `
           --username ${{ github.actor }} `
-          --password ${{ secrets.GH_TOKEN }} `
+          --password ${{ github.token }} `
           --store-password-in-clear-text
     
     - name: Cache NuGet packages
