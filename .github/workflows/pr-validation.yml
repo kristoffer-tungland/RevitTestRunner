@@ -10,10 +10,10 @@ on:
 
 permissions:
   contents: read
-  packages: read
 
 env:
-  SOLUTION_FILE: 'RevitTestRunner.sln'
+  PACKAGE_PROJECT: 'RevitXunitAdapter/RevitXunitAdapter.csproj'
+  TEST_PROJECT: 'RevitTestFramework.Common.Tests/RevitTestFramework.Common.Tests.csproj'
 
 jobs:
   validate:
@@ -33,9 +33,6 @@ jobs:
         dotnet-version: |
           8.0.x
           10.0.x
-        source-url: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
-      env:
-        NUGET_AUTH_TOKEN: ${{ github.token }}
     
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
@@ -49,34 +46,22 @@ jobs:
           ${{ runner.os }}-nuget-revit${{ matrix.revit-version }}-
           ${{ runner.os }}-nuget-
     
-    - name: Restore packages
-      run: dotnet restore ${{ env.SOLUTION_FILE }} /p:RevitVersion=${{ matrix.revit-version }}
+    - name: Restore package project
+      run: dotnet restore ${{ env.PACKAGE_PROJECT }} /p:RevitVersion=${{ matrix.revit-version }}
     
-    - name: Build solution
-      run: dotnet build ${{ env.SOLUTION_FILE }} --configuration Release --no-restore /p:RevitVersion=${{ matrix.revit-version }}
+    - name: Restore unit test project
+      run: dotnet restore ${{ env.TEST_PROJECT }} /p:RevitVersion=${{ matrix.revit-version }}
     
-    - name: Validate framework (excluding Revit integration tests)
+    - name: Build package project
+      run: dotnet build ${{ env.PACKAGE_PROJECT }} --configuration Release --no-restore /p:RevitVersion=${{ matrix.revit-version }} /p:Version=${{ matrix.revit-version }}.0.1-test
+    
+    - name: Run framework unit tests
+      run: dotnet test ${{ env.TEST_PROJECT }} --configuration Release --no-restore /p:RevitVersion=${{ matrix.revit-version }} --logger "trx;LogFileName=framework-tests.trx" --results-directory TestResults-${{ matrix.revit-version }}
+
+    - name: Create validation summary
       run: |
-        echo "Validating framework for Revit ${{ matrix.revit-version }}"
-        echo "Build completed successfully - framework components are ready"
-        echo "Note: Integration tests (MyRevitTestsXunit) require local Revit installation"
-        echo "To run integration tests locally: dotnet test ${{ env.SOLUTION_FILE }} --configuration Release"
-    
-    - name: Create validation results
-      run: |
-        New-Item -ItemType Directory -Path "TestResults-${{ matrix.revit-version }}" -Force
-        $validationResults = @"
-        <?xml version="1.0" encoding="UTF-8"?>
-        <TestRun>
-          <Results>
-            <!-- PR Validation completed - build successful for Revit ${{ matrix.revit-version }} -->
-          </Results>
-          <TestDefinitions>
-            <!-- Framework validation passed -->
-          </TestDefinitions>
-        </TestRun>
-        "@
-        $validationResults | Out-File -FilePath "TestResults-${{ matrix.revit-version }}/validation-results.trx" -Encoding UTF8
+        Write-Host "Validated package build and framework unit tests for Revit ${{ matrix.revit-version }}."
+        Write-Host "MyRevitTestsXunit and MyRevitTestsNuGet are intentionally excluded from CI."
     
     - name: Upload validation results
       uses: actions/upload-artifact@v4
@@ -86,7 +71,7 @@ jobs:
         path: TestResults-${{ matrix.revit-version }}/*.trx
     
     - name: Test pack (without publishing)
-      run: dotnet pack RevitXunitAdapter/RevitXunitAdapter.csproj --configuration Release --no-build --output test-nupkgs /p:RevitVersion=${{ matrix.revit-version }} /p:Version=${{ matrix.revit-version }}.0.1-test
+      run: dotnet pack ${{ env.PACKAGE_PROJECT }} --configuration Release --no-build --output test-nupkgs /p:RevitVersion=${{ matrix.revit-version }} /p:Version=${{ matrix.revit-version }}.0.1-test
     
     - name: Verify package contents
       run: |

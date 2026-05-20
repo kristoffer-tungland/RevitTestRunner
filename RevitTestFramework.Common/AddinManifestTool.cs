@@ -69,6 +69,11 @@ public static class AddinManifestTool
     /// <returns>Normalized version suitable for assembly versions (always 4-part)</returns>
     public static string NormalizeVersionForAssembly(string version)
     {
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            return "2025.0.0.0";
+        }
+
         // For assembly versions, we always want 4-part versions for consistency
         return RevitTestFramework.Contracts.VersionNormalizationUtils.NormalizeVersion(version);
     }

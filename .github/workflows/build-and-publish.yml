@@ -1,8 +1,6 @@
 name: Build and Publish
 
 on:
-  pull_request:
-    branches: [ main ]
   push:
     branches: [ main ]
   release:
@@ -12,15 +10,14 @@ permissions:
   contents: read
 
 env:
-  SOLUTION_FILE: 'RevitTestRunner.sln'
   PACKAGE_PROJECT: 'RevitXunitAdapter/RevitXunitAdapter.csproj'
+  TEST_PROJECT: 'RevitTestFramework.Common.Tests/RevitTestFramework.Common.Tests.csproj'
 
 jobs:
   build:
     runs-on: windows-latest
     permissions:
       contents: read
-      packages: read
     
     strategy:
       matrix:
@@ -44,9 +41,6 @@ jobs:
         dotnet-version: |
           8.0.x
           10.0.x
-        source-url: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
-      env:
-        NUGET_AUTH_TOKEN: ${{ github.token }}
     
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
@@ -93,40 +87,17 @@ jobs:
         echo "Base Version: ${{ steps.version.outputs.semVer }}"
         echo "Revit ${{ matrix.revit-version }} Version: ${{ steps.revit-version.outputs.revit-specific-version }}"
 
-    - name: Restore NuGet packages
-      run: dotnet restore ${{ env.SOLUTION_FILE }} /p:RevitVersion=${{ matrix.revit-version }}
+    - name: Restore package project
+      run: dotnet restore ${{ env.PACKAGE_PROJECT }} /p:RevitVersion=${{ matrix.revit-version }}
     
-    - name: Build solution
-      run: dotnet build ${{ env.SOLUTION_FILE }} --configuration Release --no-restore /p:RevitVersion=${{ matrix.revit-version }} /p:Version=${{ steps.revit-version.outputs.revit-specific-version }}
+    - name: Restore unit test project
+      run: dotnet restore ${{ env.TEST_PROJECT }} /p:RevitVersion=${{ matrix.revit-version }}
     
-    - name: Run framework tests (excluding Revit integration tests)
-      run: |
-        echo "Running framework tests for Revit ${{ matrix.revit-version }} (excluding MyRevitTestsXunit which requires Revit installation)"
-        echo "Testing only framework components that don't require Revit"
-        
-        # Test individual projects that contain unit tests (not integration tests)
-        # Note: Most projects in this solution are libraries without unit tests
-        # The main test project (MyRevitTestsXunit) requires Revit and is excluded
-        
-        # Test the solution build but skip test execution since most are integration tests
-        echo "Framework build completed successfully. Integration tests require local Revit installation."
-        echo "To run integration tests locally: dotnet test ${{ env.SOLUTION_FILE }} --configuration Release"
+    - name: Build package project
+      run: dotnet build ${{ env.PACKAGE_PROJECT }} --configuration Release --no-restore /p:RevitVersion=${{ matrix.revit-version }} /p:Version=${{ steps.revit-version.outputs.revit-specific-version }}
     
-    - name: Create empty test results (for artifact consistency)
-      run: |
-        New-Item -ItemType Directory -Path "TestResults-${{ matrix.revit-version }}" -Force
-        $emptyTrx = @"
-        <?xml version="1.0" encoding="UTF-8"?>
-        <TestRun>
-          <Results>
-            <!-- No tests run in CI/CD - integration tests require Revit installation -->
-          </Results>
-          <TestDefinitions>
-            <!-- Framework tests would be defined here if they existed -->
-          </TestDefinitions>
-        </TestRun>
-        "@
-        $emptyTrx | Out-File -FilePath "TestResults-${{ matrix.revit-version }}/framework-tests.trx" -Encoding UTF8
+    - name: Run framework unit tests
+      run: dotnet test ${{ env.TEST_PROJECT }} --configuration Release --no-restore /p:RevitVersion=${{ matrix.revit-version }} --logger "trx;LogFileName=framework-tests.trx" --results-directory TestResults-${{ matrix.revit-version }}
     
     - name: Upload test results
       uses: actions/upload-artifact@v4
@@ -159,7 +130,7 @@ jobs:
   publish-github:
     needs: build
     runs-on: windows-latest
-    if: (github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork) || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
@@ -188,9 +159,6 @@ jobs:
         dotnet-version: |
           8.0.x
           10.0.x
-        source-url: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
-      env:
-        NUGET_AUTH_TOKEN: ${{ github.token }}
     
     - name: Push to GitHub Package Registry
       run: |
