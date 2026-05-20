@@ -19,11 +19,13 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
 {
     private readonly ExceptionAggregator _aggregator = aggregator;
     private readonly RevitTestConfiguration _configuration = configuration;
+    private readonly string _skipReason = skipReason;
     private static ILogger _logger = FileLogger.ForContext(typeof(RevitXunitTestCaseRunner));
     private static readonly object _loggerLock = new object();
 
     private Document? _document;
     private TransactionGroup? _transactionGroup;
+    private CancellationTokenSource? _effectiveCancellationTokenSource;
 
     /// <summary>
     /// Sets a pipe-aware logger for test execution
@@ -159,6 +161,12 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
 
     protected override async Task<RunSummary> RunTestAsync()
     {
+        if (!string.IsNullOrEmpty(_skipReason))
+        {
+            Logger.LogInformation($"Skipping test '{TestCase.TestMethod.Method.Name}': {_skipReason}");
+            return await base.RunTestAsync();
+        }
+
         // Setup timeout if specified
         CancellationTokenSource? timeoutCts = null;
         CancellationTokenSource? combinedCts = null;
@@ -174,6 +182,7 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
         {
             // Use the combined cancellation token source if timeout is configured
             var effectiveCts = combinedCts ?? CancellationTokenSource;
+            _effectiveCancellationTokenSource = effectiveCts;
             
             // Run the test on a background thread to avoid blocking Revit UI
             return await Task.Run(async () =>
@@ -349,6 +358,7 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
         }
         finally
         {
+            _effectiveCancellationTokenSource = null;
             timeoutCts?.Dispose();
             combinedCts?.Dispose();
         }
@@ -447,14 +457,14 @@ public class RevitXunitTestCaseRunner(IXunitTestCase testCase, string displayNam
             else if (paramType == typeof(CancellationToken))
             {
                 // Inject the current effective CancellationToken (could be timeout-combined)
-                testMethodArguments[i] = cancellationTokenSource.Token;
+                testMethodArguments[i] = (_effectiveCancellationTokenSource ?? cancellationTokenSource).Token;
             }
             else if (paramType == typeof(CancellationToken?) || 
                     (paramType.IsGenericType && paramType.GetGenericTypeDefinition() == typeof(Nullable<>) && 
                      Nullable.GetUnderlyingType(paramType) == typeof(CancellationToken)))
             {
                 // Inject the current effective CancellationToken (could be timeout-combined)
-                testMethodArguments[i] = cancellationTokenSource.Token;
+                testMethodArguments[i] = (_effectiveCancellationTokenSource ?? cancellationTokenSource).Token;
             }
             else if (!isNullable && testMethodArguments[i] == null)
             {

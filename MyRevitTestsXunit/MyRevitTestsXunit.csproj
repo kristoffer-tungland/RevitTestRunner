@@ -15,10 +15,6 @@
     <PackageReference Include="System.Management" Version="4.7.0" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*" />
-    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\RevitTestFramework.Xunit.Contracts\RevitTestFramework.Xunit.Contracts.csproj" />
     <ProjectReference Include="..\RevitXunitAdapter\RevitXunitAdapter.csproj" />
   </ItemGroup>

@@ -21,6 +21,26 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>False</Visible>
     </None>
+    <None Include="$(MSBuildThisFileDirectory)RevitTestFramework.Common.exe">
+      <Link>RevitTestFramework.Common.exe</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>False</Visible>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)RevitTestFramework.Common.dll">
+      <Link>RevitTestFramework.Common.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>False</Visible>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)RevitTestFramework.Common.deps.json">
+      <Link>RevitTestFramework.Common.deps.json</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>False</Visible>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)RevitTestFramework.Common.runtimeconfig.json">
+      <Link>RevitTestFramework.Common.runtimeconfig.json</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>False</Visible>
+    </None>
     <None Include="$(MSBuildThisFileDirectory)System.Management.dll">
       <Link>System.Management.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

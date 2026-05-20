@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Text.RegularExpressions;
 
@@ -114,7 +115,7 @@ public static partial class VersionNormalizationUtils
 /// <summary>
 /// Provides constants and utility methods for pipe naming in the Revit Test Framework
 /// </summary>
-public static class PipeNaming
+public static partial class PipeNaming
 {
     /// <summary>
     /// The prefix used for all Revit test pipe names
@@ -144,6 +145,70 @@ public static class PipeNaming
         var assemblyVersion = GetCurrentAssemblyInformationalVersion();
         return GetPipeName(assemblyVersion, Environment.ProcessId);
     }
+
+    /// <summary>
+    /// Calculates the pipe name for the current process using the version derived from
+    /// an addin assembly file on disk.  The version is read from the filename first
+    /// (e.g. RevitAddin.Xunit.2027.1.1-PullRequest0020.12.dll → 2027.1.1-PullRequest0020.12),
+    /// which guarantees a Revit-year-prefixed, globally unique version string regardless of
+    /// what the assembly's InformationalVersion attribute says (some older packages have "0.x.y").
+    /// </summary>
+    /// <param name="assemblyFilePath">Full path to the addin DLL (e.g. RevitAddin.Xunit.*.dll)</param>
+    /// <returns>The formatted pipe name using the addin's version and current process ID</returns>
+    public static string GetCurrentProcessPipeName(string assemblyFilePath)
+    {
+        var version = GetVersionFromAssemblyFile(assemblyFilePath);
+        return GetPipeName(version, Environment.ProcessId);
+    }
+
+    /// <summary>
+    /// Extracts the canonical version string from an addin assembly file.
+    /// Priority order:
+    ///   1. AssemblyInformationalVersion attribute when it starts with a Revit year (≥ 2020).
+    ///   2. Version embedded in the filename (e.g. RevitAddin.Xunit.2027.1.1-PullRequest0020.12.dll).
+    ///   3. AssemblyInformationalVersion attribute even without a Revit year prefix (fallback).
+    /// Build metadata ("+sha…") is always stripped before returning.
+    /// </summary>
+    /// <param name="assemblyFilePath">Full path to the DLL to inspect</param>
+    /// <returns>Version string suitable for passing to <see cref="NormalizeVersionForPipe"/></returns>
+    public static string GetVersionFromAssemblyFile(string assemblyFilePath)
+    {
+        // 1. Read InformationalVersion from the PE header without loading the assembly into the CLR.
+        string? infoVersion = null;
+        try
+        {
+            var fi = FileVersionInfo.GetVersionInfo(assemblyFilePath);
+            if (!string.IsNullOrEmpty(fi.ProductVersion))
+                infoVersion = fi.ProductVersion.Split('+')[0]; // strip build metadata
+        }
+        catch { }
+
+        if (!string.IsNullOrEmpty(infoVersion) && StartsWithRevitYear(infoVersion))
+            return infoVersion;
+
+        // 2. Try to extract the version from the filename.
+        //    Handles filenames like: RevitAddin.Xunit.2027.1.1-PullRequest0020.12.dll
+        var filename = Path.GetFileNameWithoutExtension(assemblyFilePath);
+        var match = FilenameVersionRegex().Match(filename);
+        if (match.Success)
+            return match.Groups["version"].Value;
+
+        // 3. Fall back to InformationalVersion even without a Revit year prefix.
+        return infoVersion ?? "0.0.0.0";
+    }
+
+    /// <summary>Returns true when the version string begins with a 4-digit Revit year (≥ 2020).</summary>
+    private static bool StartsWithRevitYear(string version)
+    {
+        var dot = version.IndexOf('.');
+        var yearStr = dot > 0 ? version.Substring(0, dot) : version;
+        return yearStr.Length == 4
+            && int.TryParse(yearStr, out int year)
+            && year >= 2020;
+    }
+
+    [GeneratedRegex(@"(?<version>\d{4}\.\d+\.\d+(?:-[a-zA-Z0-9]+(?:\.\d+)*)?)$")]
+    private static partial Regex FilenameVersionRegex();
 
     /// <summary>
     /// Calculates the pipe name for a specific assembly using the assembly version

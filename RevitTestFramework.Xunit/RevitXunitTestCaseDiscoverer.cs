@@ -8,6 +8,27 @@ public class RevitXunitTestCaseDiscoverer(IMessageSink diagnosticMessageSink) : 
 {
     private readonly IMessageSink _diagnosticMessageSink = diagnosticMessageSink;
 
+    private static string? GetCloudModelSkipReason(string? projectGuid, string? modelGuid, string? localPath)
+    {
+        if (!string.IsNullOrEmpty(localPath) || string.IsNullOrEmpty(projectGuid) || string.IsNullOrEmpty(modelGuid))
+        {
+            return null;
+        }
+
+        if (!IsSamplePlaceholderGuid(projectGuid) && !IsSamplePlaceholderGuid(modelGuid))
+        {
+            return null;
+        }
+
+        return "Cloud model test uses sample placeholder GUIDs. Replace projectGuid and modelGuid with real cloud model GUIDs to run it.";
+    }
+
+    private static bool IsSamplePlaceholderGuid(string guid)
+    {
+        var trimmed = guid.Replace("-", string.Empty, StringComparison.Ordinal);
+        return trimmed.Length > 0 && trimmed.All(ch => char.ToUpperInvariant(ch) == 'A' || char.ToUpperInvariant(ch) == 'B');
+    }
+
     public IEnumerable<IXunitTestCase> Discover(ITestFrameworkDiscoveryOptions discoveryOptions,
                                                 ITestMethod testMethod,
                                                 IAttributeInfo factAttribute)
@@ -44,8 +65,11 @@ public class RevitXunitTestCaseDiscoverer(IMessageSink diagnosticMessageSink) : 
             closeModel,
             timeout);
 
+        var skipReason = GetCloudModelSkipReason(projectGuid, modelGuid, localPath);
+
         yield return new RevitXunitTestCase(_diagnosticMessageSink,
             discoveryOptions.MethodDisplayOrDefault(), testMethod,
-            configuration);
+            configuration,
+            skipReason);
     }
 }

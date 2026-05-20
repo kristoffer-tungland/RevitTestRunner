@@ -12,6 +12,34 @@
     <!-- Product version - now includes RevitVersion.Minor.Patch format for ALL projects -->
     <Version>$(RevitVersion).1.1-pullrequest0020.10</Version>
   </PropertyGroup>
+
+  <PropertyGroup>
+    <UsesRevitApiReferences>false</UsesRevitApiReferences>
+    <UsesRevitApiReferences Condition="'$(MSBuildProjectName)' == 'MyRevitTestsNuGet' OR '$(MSBuildProjectName)' == 'MyRevitTestsXunit' OR $(MSBuildProjectName.StartsWith('RevitTestFramework.')) OR $(MSBuildProjectName.StartsWith('RevitAddin.'))">true</UsesRevitApiReferences>
+
+    <DefaultRevitInstallDir>$([System.String]::Copy('C:\Program Files\Autodesk\Revit $(RevitVersion)'))</DefaultRevitInstallDir>
+    <DefaultRevitInstallDir Condition="'$(RevitVersion)' == '2027' AND Exists('C:\Program Files\Autodesk\Revit Preview Release\RevitAPI.dll')">C:\Program Files\Autodesk\Revit Preview Release</DefaultRevitInstallDir>
+
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == '' AND Exists('$(DefaultRevitInstallDir)\RevitAPI.dll') AND Exists('$(DefaultRevitInstallDir)\RevitAPIUI.dll')">$(DefaultRevitInstallDir)</RevitInstallDir>
+    <UseInstalledRevitApi Condition="'$(UsesRevitApiReferences)' == 'true' AND Exists('$(RevitInstallDir)\RevitAPI.dll') AND Exists('$(RevitInstallDir)\RevitAPIUI.dll')">true</UseInstalledRevitApi>
+    <UseInstalledRevitApi Condition="'$(UseInstalledRevitApi)' == ''">false</UseInstalledRevitApi>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(UsesRevitApiReferences)' == 'true' AND '$(UseInstalledRevitApi)' == 'true'">
+    <Reference Include="RevitAPI">
+      <HintPath>$(RevitInstallDir)\RevitAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="RevitAPIUI">
+      <HintPath>$(RevitInstallDir)\RevitAPIUI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UsesRevitApiReferences)' == 'true' AND '$(UseInstalledRevitApi)' != 'true'">
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*" />
+  </ItemGroup>
   
   <!-- Handle assembly versioning for all projects -->
   <!-- AssemblyVersion and FileVersion must be numeric-only in all .NET projects -->

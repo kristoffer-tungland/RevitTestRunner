@@ -7,6 +7,7 @@ namespace RevitTestFramework.Xunit;
 public class RevitXunitTestCase : XunitTestCase
 {
     private Common.RevitTestConfiguration _configuration;
+    private string? _customSkipReason;
 
     [Obsolete("Called by the de-serializer", true)]
     public RevitXunitTestCase() 
@@ -17,10 +18,12 @@ public class RevitXunitTestCase : XunitTestCase
     public RevitXunitTestCase(IMessageSink diagnosticMessageSink,
                                TestMethodDisplay defaultMethodDisplay,
                                ITestMethod testMethod,
-                               Common.RevitTestConfiguration configuration)
+                               Common.RevitTestConfiguration configuration,
+                               string? customSkipReason = null)
         : base(diagnosticMessageSink, defaultMethodDisplay, testMethod)
     {
         _configuration = configuration;
+        _customSkipReason = customSkipReason;
     }
 
     public override Task<RunSummary> RunAsync(IMessageSink diagnosticMessageSink,
@@ -29,7 +32,7 @@ public class RevitXunitTestCase : XunitTestCase
                                                     ExceptionAggregator aggregator,
                                                     CancellationTokenSource cancellationTokenSource)
     {
-        var runner = new RevitXunitTestCaseRunner(this, DisplayName, SkipReason,
+        var runner = new RevitXunitTestCaseRunner(this, DisplayName, _customSkipReason ?? SkipReason,
             constructorArguments, messageBus, aggregator,
             cancellationTokenSource, _configuration);
         return runner.RunAsync();
@@ -46,6 +49,7 @@ public class RevitXunitTestCase : XunitTestCase
         data.AddValue("CloudRegion", _configuration.CloudRegion);
         data.AddValue("CloseModel", _configuration.CloseModel);
         data.AddValue("Timeout", _configuration.Timeout);
+        data.AddValue("CustomSkipReason", _customSkipReason);
     }
 
     public override void Deserialize(IXunitSerializationInfo data)
@@ -59,6 +63,7 @@ public class RevitXunitTestCase : XunitTestCase
         var cloudRegion = data.GetValue<string>("CloudRegion");
         var closeModel = data.GetValue<bool>("CloseModel");
         var timeout = data.GetValue<int>("Timeout");
+        _customSkipReason = data.GetValue<string?>("CustomSkipReason");
         
         _configuration = new Common.RevitTestConfiguration(
             projectGuid,

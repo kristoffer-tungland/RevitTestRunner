@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Use the same target framework as the rest of the solution for the given RevitVersion -->
+    <TargetFramework>$(RevitTargetFramework)</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- Default to Revit 2025 if not specified via /p:RevitVersion=XXXX -->
+    <RevitVersion Condition="'$(RevitVersion)' == ''">2025</RevitVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <!-- Consume the published NuGet package from GitHub Packages instead of a project reference.
+         Uses a floating version (RevitVersion).*-* to pick up the latest release or pre-release
+         for the targeted Revit version. -->
+    <PackageReference Include="RevitXunit.TestAdapter" Version="$(RevitVersion).*-*" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="test.runsettings">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+</Project>

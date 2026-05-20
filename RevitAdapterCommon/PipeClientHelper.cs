@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Pipes;
+using System.Linq;
 using System.Text.Json;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -492,10 +493,11 @@ public static class PipeClientHelper
     /// Waits for the Revit process to initialize its test infrastructure and become available for pipe connections
     /// </summary>
     /// <param name="revitProcess">The Revit process to wait for</param>
+    /// <param name="normalizedAddinVersion">Normalized version string derived from the addin DLL filename</param>
     /// <param name="logger">Optional logger for sending informational messages</param>
     /// <param name="maxWaitTimeMs">Maximum time to wait in milliseconds</param>
     /// <returns>True if the pipe becomes available, false if timeout occurs</returns>
-    private static bool WaitForRevitPipeAvailability(Process revitProcess, ILogger? logger, int maxWaitTimeMs = 60000)
+    private static bool WaitForRevitPipeAvailability(Process revitProcess, string normalizedAddinVersion, ILogger? logger, int maxWaitTimeMs = 60000)
     {
         logger?.LogInformation("PipeClientHelper: Waiting for Revit test infrastructure to initialize...");
 
@@ -512,9 +514,8 @@ public static class PipeClientHelper
 
             try
             {
-                // Get the normalized assembly version using shared logic
-                var assemblyVersion = GetCurrentAssemblyVersion();
-                var pipeName = PipeNaming.GetPipeName(assemblyVersion, revitProcess.Id);
+                // Use the addin's normalized version (from its filename) for the pipe name
+                var pipeName = PipeNaming.GetPipeName(normalizedAddinVersion, revitProcess.Id);
 
                 logger?.LogInformation($"PipeClientHelper: Checking for pipe availability: '{pipeName}'");
 
@@ -546,21 +547,21 @@ public static class PipeClientHelper
     /// Ensures the Revit addin is installed before attempting to connect
     /// </summary>
     /// <param name="revitVersion">The Revit version to install for</param>
+    /// <param name="normalizedAddinVersion">Normalized version derived from the addin DLL filename</param>
+    /// <param name="addinAssemblyPath">Path to the RevitAddin.Xunit DLL (may be null)</param>
+    /// <param name="commonTool">Path to RevitTestFramework.Common.exe (may be null)</param>
     /// <param name="logger">Optional logger for informational messages</param>
     /// <returns>True if addin is installed or was successfully installed, false otherwise</returns>
-    private static bool EnsureRevitAddinInstalled(string revitVersion, ILogger? logger)
+    private static bool EnsureRevitAddinInstalled(string revitVersion, string normalizedAddinVersion, string? addinAssemblyPath, string? commonTool, ILogger? logger)
     {
         try
         {
             logger?.LogInformation($"PipeClientHelper: Checking if Revit addin is installed for version {revitVersion}");
 
-            // Get the normalized assembly version using shared logic
-            var normalizedVersion = GetCurrentAssemblyVersion();
-
             // Construct the manifest file path
             var addinDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                                       "Autodesk", "Revit", "Addins", revitVersion);
-            var manifestFile = Path.Combine(addinDir, $"RevitAddin.Xunit.{normalizedVersion}.addin");
+            var manifestFile = Path.Combine(addinDir, $"RevitAddin.Xunit.{normalizedAddinVersion}.addin");
 
             if (File.Exists(manifestFile))
             {
@@ -571,8 +572,6 @@ public static class PipeClientHelper
             logger?.LogInformation($"PipeClientHelper: Revit addin manifest not found at: {manifestFile}");
             logger?.LogInformation("PipeClientHelper: Attempting to install addin automatically...");
 
-            // Try to find the RevitTestFramework.Common.exe tool
-            var commonTool = FindRevitTestFrameworkCommonTool(logger);
             if (string.IsNullOrEmpty(commonTool))
             {
                 logger?.LogError("PipeClientHelper: Could not find RevitTestFramework.Common.exe tool for automatic addin installation");
@@ -580,8 +579,9 @@ public static class PipeClientHelper
             }
 
             // Run the tool to generate the addin manifest
-            // Note: We no longer pass --assembly-version since the tool auto-detects from assembly filename
-            var arguments = $"generate-manifest --output \"{addinDir}\"";
+            var arguments = string.IsNullOrEmpty(addinAssemblyPath)
+                ? $"generate-manifest --output \"{addinDir}\""
+                : $"generate-manifest --output \"{addinDir}\" --assembly \"{addinAssemblyPath}\"";
             logger?.LogInformation($"PipeClientHelper: Running addin installation: {commonTool} {arguments}");
 
             var psi = new ProcessStartInfo
@@ -643,21 +643,27 @@ public static class PipeClientHelper
     {
         var assembly = System.Reflection.Assembly.GetExecutingAssembly();
         string assemblyDirectory = Path.GetDirectoryName(assembly.Location) ?? throw new InvalidOperationException("Could not determine assembly location");
-        var informationalVersion = VersionNormalizationUtils.NormalizeVersion(PipeNaming.GetAssemblyInformationalVersion(assembly));
+        // Use the raw informational version (lowercased, build-metadata stripped) for the NuGet cache
+        // path. The NuGet cache folder uses the original package version string without the +<sha>
+        // build metadata suffix (e.g. "2027.1.1-pullrequest0020.12").
+        var rawInformationalVersion = PipeNaming.GetAssemblyInformationalVersion(assembly)
+            .ToLowerInvariant()
+            .Split('+')[0];
+        var nugetCachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                                          ".nuget", "packages", "revitxunit.testadapter", rawInformationalVersion, "content", "RevitAddin");
 
         // Try to find RevitTestFramework.Common.exe in various locations
         var searchLocations = new[]
         {
-#if DEBUG
-            // Reletive path to RevitTestFramework.Common in debug mode
-            Path.Combine(assemblyDirectory, "..", "..", "..", "..", "RevitAddin.Xunit", "bin", "Debug", "net8.0"),
-#else
-            // Same directory as current assembly
+            // Same directory as current assembly — works when RevitTestFramework.Common.exe is
+            // included in build/{tfm}/ of the NuGet package and copied to output via props.
             assemblyDirectory,
-            // NuGet package location
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), 
-                         ".nuget", "packages", "revitxunit.testadapter", informationalVersion, "content", "RevitAddin")
+#if DEBUG
+            // Relative path for project-reference (non-NuGet) builds in debug mode
+            Path.Combine(assemblyDirectory, "..", "..", "..", "..", "RevitAddin.Xunit", "bin", "Debug", "net8.0"),
 #endif
+            // NuGet package cache fallback
+            nugetCachePath
         };
 
         foreach (var location in searchLocations.Where(l => !string.IsNullOrEmpty(l)))
@@ -681,6 +687,83 @@ public static class PipeClientHelper
         }
 
         logger?.LogError("PipeClientHelper: RevitTestFramework.Common.exe not found in any search location");
+        return null;
+    }
+
+    /// <summary>
+    /// Finds the RevitAddin.Xunit assembly for use with generate-manifest --assembly
+    /// </summary>
+    private static string? FindRevitAddinXunitAssembly(string? commonToolPath, ILogger? logger)
+    {
+        var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+        string assemblyDirectory = Path.GetDirectoryName(assembly.Location) ?? "";
+
+        var searchLocations = new List<string> { assemblyDirectory };
+
+        // If we know where the common tool is AND it's in a NuGet cache build/{tfm} folder,
+        // derive content/RevitAddin from the package version directory.
+        // Tool path: .nuget/packages/revitxunit.testadapter/{version}/build/{tfm}/RevitTestFramework.Common.exe
+        // Content path: .nuget/packages/revitxunit.testadapter/{version}/content/RevitAddin/
+        if (!string.IsNullOrEmpty(commonToolPath))
+        {
+            var toolDir = Path.GetDirectoryName(commonToolPath); // .../build/{tfm} or output dir
+            if (toolDir != null)
+            {
+                // Check two levels up (build/{tfm}) to see if it's a NuGet package structure
+                var buildDir = Path.GetDirectoryName(toolDir);
+                if (buildDir != null && Path.GetFileName(buildDir).Equals("build", StringComparison.OrdinalIgnoreCase))
+                {
+                    var packageVersionDir = Path.GetDirectoryName(buildDir);
+                    if (packageVersionDir != null)
+                    {
+                        searchLocations.Add(Path.Combine(packageVersionDir, "content", "RevitAddin"));
+                    }
+                }
+            }
+        }
+
+        // Also search NuGet package cache using the raw informational version
+        var rawInformationalVersion = PipeNaming.GetAssemblyInformationalVersion(assembly)
+            .ToLowerInvariant()
+            .Split('+')[0];
+        var nugetContentPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".nuget", "packages", "revitxunit.testadapter", rawInformationalVersion, "content", "RevitAddin");
+        searchLocations.Add(nugetContentPath);
+
+        // Also try scanning all versions of the package in NuGet cache
+        // Prefer versions matching the current Revit year (first 4 digits of informational version)
+        var revitYearPrefix = rawInformationalVersion.Length >= 4 ? rawInformationalVersion.Substring(0, 4) : "";
+        var nugetPackagePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".nuget", "packages", "revitxunit.testadapter");
+        if (Directory.Exists(nugetPackagePath))
+        {
+            // Put matching Revit-year versions first
+            var versionDirs = Directory.GetDirectories(nugetPackagePath)
+                .OrderByDescending(d => Path.GetFileName(d).StartsWith(revitYearPrefix, StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(d => d);
+            foreach (var versionDir in versionDirs)
+            {
+                searchLocations.Add(Path.Combine(versionDir, "content", "RevitAddin"));
+            }
+        }
+
+        foreach (var location in searchLocations.Where(l => !string.IsNullOrEmpty(l)))
+        {
+            try
+            {
+                if (!Directory.Exists(location)) continue;
+                var matches = Directory.GetFiles(location, "RevitAddin.Xunit*.dll");
+                if (matches.Length > 0)
+                {
+                    logger?.LogInformation($"PipeClientHelper: Found RevitAddin.Xunit assembly at: {matches[0]}");
+                    return matches[0];
+                }
+            }
+            catch { }
+        }
+        logger?.LogInformation("PipeClientHelper: RevitAddin.Xunit assembly not found; tool will auto-detect");
         return null;
     }
 
@@ -726,14 +809,23 @@ public static class PipeClientHelper
     {
         logger?.LogInformation($"PipeClientHelper: Attempting to connect to Revit {revitVersion}");
 
-        // First, ensure the addin is installed
-        if (!EnsureRevitAddinInstalled(revitVersion, logger))
+        // Discover the addin DLL and derive the normalized version from its filename.
+        // Both the client (here) and the server (IsolatedPipeServerHandler) use the filename
+        // to get a Revit-year-prefixed version (e.g. 2027.1.1.2012), which ensures that
+        // versions are globally unique across Revit years and supports PR builds.
+        var commonTool = FindRevitTestFrameworkCommonTool(logger);
+        var addinDllPath = FindRevitAddinXunitAssembly(commonTool, logger);
+        var normalizedAddinVersion = GetNormalizedVersionFromAddinPath(addinDllPath, logger);
+        logger?.LogInformation($"PipeClientHelper: Using addin version: {normalizedAddinVersion}");
+
+        // Ensure the addin is installed
+        if (!EnsureRevitAddinInstalled(revitVersion, normalizedAddinVersion, addinDllPath, commonTool, logger))
         {
             throw new InvalidOperationException($"Failed to ensure Revit addin is installed for version {revitVersion}");
         }
 
         // Try to connect to existing Revit instances first
-        var existingConnection = ConnectToExistingRevitInstance(revitVersion, logger);
+        var existingConnection = ConnectToExistingRevitInstance(normalizedAddinVersion, logger);
         if (existingConnection != null)
         {
             return existingConnection;
@@ -744,7 +836,7 @@ public static class PipeClientHelper
         var revitProcess = LaunchHiddenRevit(revitVersion, logger);
 
         // Wait for the test infrastructure to be available
-        if (!WaitForRevitPipeAvailability(revitProcess, logger))
+        if (!WaitForRevitPipeAvailability(revitProcess, normalizedAddinVersion, logger))
         {
             // Clean up the launched process if pipe isn't available
             try
@@ -761,7 +853,7 @@ public static class PipeClientHelper
         }
 
         // Connect to the newly launched instance
-        var newConnection = ConnectToSpecificRevitProcess(revitProcess.Id, logger);
+        var newConnection = ConnectToSpecificRevitProcess(revitProcess.Id, normalizedAddinVersion, logger);
         if (newConnection == null)
         {
             throw new InvalidOperationException($"Failed to connect to newly launched Revit process {revitProcess.Id}");
@@ -771,12 +863,27 @@ public static class PipeClientHelper
     }
 
     /// <summary>
-    /// Attempts to connect to an existing Revit instance
+    /// Returns the normalized version string derived from the addin DLL's filename.
+    /// Falls back to the Contracts assembly version when no addin DLL is available.
     /// </summary>
-    /// <param name="revitVersion">The Revit version to look for</param>
+    private static string GetNormalizedVersionFromAddinPath(string? addinDllPath, ILogger? logger)
+    {
+        if (!string.IsNullOrEmpty(addinDllPath) && File.Exists(addinDllPath))
+        {
+            var rawVersion = PipeNaming.GetVersionFromAssemblyFile(addinDllPath);
+            return VersionNormalizationUtils.NormalizeVersion(rawVersion);
+        }
+        logger?.LogInformation("PipeClientHelper: Addin DLL not found; falling back to Contracts assembly version");
+        return GetCurrentAssemblyVersion();
+    }
+
+    /// <summary>
+    /// Attempts to connect to an existing Revit instance using the given addin version.
+    /// </summary>
+    /// <param name="normalizedAddinVersion">Normalized version derived from the addin DLL filename</param>
     /// <param name="logger">Optional logger for informational messages</param>
     /// <returns>Connection result if successful, null if no suitable instance found</returns>
-    private static RevitConnectionResult? ConnectToExistingRevitInstance(string revitVersion, ILogger? logger)
+    private static RevitConnectionResult? ConnectToExistingRevitInstance(string normalizedAddinVersion, ILogger? logger)
     {
         try
         {
@@ -787,8 +894,7 @@ public static class PipeClientHelper
             {
                 try
                 {
-                    // Check if this process matches our Revit version (this is a simplified check)
-                    var connection = ConnectToSpecificRevitProcess(process.Id, logger);
+                    var connection = ConnectToSpecificRevitProcess(process.Id, normalizedAddinVersion, logger);
                     if (connection != null)
                     {
                         logger?.LogInformation($"PipeClientHelper: Successfully connected to existing Revit process {process.Id}");
@@ -810,18 +916,17 @@ public static class PipeClientHelper
     }
 
     /// <summary>
-    /// Attempts to connect to a specific Revit process
+    /// Attempts to connect to a specific Revit process using the given addin version.
     /// </summary>
     /// <param name="processId">The process ID to connect to</param>
+    /// <param name="normalizedAddinVersion">Normalized version derived from the addin DLL filename</param>
     /// <param name="logger">Optional logger for informational messages</param>
     /// <returns>Connection result if successful, null if connection failed</returns>
-    private static RevitConnectionResult? ConnectToSpecificRevitProcess(int processId, ILogger? logger)
+    private static RevitConnectionResult? ConnectToSpecificRevitProcess(int processId, string normalizedAddinVersion, ILogger? logger)
     {
         try
         {
-            // Get the normalized assembly version using shared logic
-            var assemblyVersion = GetCurrentAssemblyVersion();
-            var pipeName = PipeNaming.GetPipeName(assemblyVersion, processId);
+            var pipeName = PipeNaming.GetPipeName(normalizedAddinVersion, processId);
 
             logger?.LogInformation($"PipeClientHelper: Attempting to connect to pipe: {pipeName}");
 
