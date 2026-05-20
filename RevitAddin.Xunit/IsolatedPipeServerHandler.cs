@@ -28,8 +28,14 @@ public class IsolatedPipeServerHandler
 
             // Use RevitTask to manage UI thread execution
             _revitTask = new RevitTask();
-            var pipeName = PipeNaming.GetCurrentProcessPipeName();
-            _logger.LogInformation($"Using pipe name: {pipeName}");
+
+            // Derive the pipe name from this assembly's file path so the version comes from
+            // the filename (e.g. RevitAddin.Xunit.2027.1.1-PullRequest0020.12.dll).
+            // This guarantees a Revit-year-prefixed version even for older packages where the
+            // AssemblyInformationalVersion attribute only contains the short "0.x.y" form.
+            var addinAssemblyPath = Assembly.GetExecutingAssembly().Location;
+            var pipeName = PipeNaming.GetCurrentProcessPipeName(addinAssemblyPath);
+            _logger.LogInformation($"Using pipe name: {pipeName} (derived from {addinAssemblyPath})");
             
             _server = new PipeServer(pipeName, _revitTask, path => new XunitTestAssemblyLoadContext(path));
             _server.Start();

@@ -2,7 +2,7 @@
 # This script helps developers run the full test suite locally where Revit is installed
 
 param(
-    [string[]]$RevitVersions = @("2025", "2026"),
+    [string[]]$RevitVersions = @("2025", "2026", "2027"),
     [string]$Configuration = "Release",
     [switch]$FrameworkOnly,
     [switch]$IntegrationOnly

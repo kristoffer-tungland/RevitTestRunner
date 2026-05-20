@@ -30,14 +30,15 @@ public static partial class RevitAddInManifestGenerator
         string assemblyFullPath = Path.GetFullPath(assemblyPath);
         string assemblyFileName = Path.GetFileName(assemblyPath);
         
-        // Extract base name without extension (e.g., "RevitAddin.Xunit.2025.0.0" from "RevitAddin.Xunit.2025.0.0.dll")
+        // Extract base name without extension (e.g., "RevitAddin.Xunit.2025.1.0-pullrequest0018.103" from "RevitAddin.Xunit.2025.1.0-pullrequest0018.103.dll")
         string baseClassName = Path.GetFileNameWithoutExtension(assemblyFileName);
         
         // Remove version suffix from the base class name for cleaner namespace (e.g., "RevitAddin.Xunit")
-        string cleanBaseClassName = AssemblyVersionSuffixRegex().Replace(baseClassName, "");
+        // This handles both standard versions (2025.0.0) and pre-release versions (2025.1.0-pullrequest0018.103)
+        string cleanBaseClassName = AllVersionSuffixRegex().Replace(baseClassName, "");
         
-        // Use the full assembly name (including version) for the manifest filename
-        string manifestPath = Path.Combine(outputPath, $"{baseClassName}.addin");
+        // Use the normalized version for the manifest filename instead of the original assembly name
+        string manifestPath = Path.Combine(outputPath, $"RevitAddin.Xunit.{version}.addin");
 
         // Create or use provided GUID for the add-in
         var addinAppId = appGuid ?? Guid.NewGuid();
@@ -89,9 +90,16 @@ public static partial class RevitAddInManifestGenerator
         Console.WriteLine($"Created addin manifest at {manifestPath}");
     }
 
+    /// <summary>
+    /// Regex to match standard version suffixes like .2025.0.0
+    /// </summary>
     [GeneratedRegex(@"\.\d{4}\.\d+\.\d+")]
     private static partial Regex AssemblyVersionSuffixRegex();
 
-    [GeneratedRegex(@"\.v\d+\.\d+\.\d+")]
-    private static partial Regex ManifestVersionSuffixRegex();
+    /// <summary>
+    /// Regex to match all version suffixes including pre-release versions
+    /// Matches patterns like .2025.0.0, .2025.1.0-pullrequest0018.103, etc.
+    /// </summary>
+    [GeneratedRegex(@"\.\d{4}\.\d+\.\d+(?:-[a-zA-Z0-9\-\.]+)?")]
+    private static partial Regex AllVersionSuffixRegex();
 }

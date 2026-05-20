@@ -71,6 +71,8 @@ namespace RevitXunitAdapter
                     Debug = Debugger.IsAttached
                 };
 
+                frameworkHandle.SendMessage(TestMessageLevel.Informational, $"RevitXunitExecutor: Cancel pipe name: {command.CancelPipe}");
+
                 if (command.Debug)
                 {
                     frameworkHandle.SendMessage(TestMessageLevel.Informational, "RevitXunitExecutor: Debugger detected - enabling debug mode for Revit test execution");
@@ -135,6 +137,7 @@ namespace RevitXunitAdapter
         /// Determines the Revit version from the current assembly version.
         /// In our versioning scheme, the assembly version is in format <RevitVersion>.<Minor>.<Patch>,
         /// so the major version number is the Revit version.
+        /// Handles both standard versions (e.g., "2025.1.0") and pre-release versions with normalized assemblies
         /// </summary>
         /// <param name="frameworkHandle">Framework handle for logging</param>
         /// <returns>The Revit version as a string (e.g., "2025", "2026")</returns>

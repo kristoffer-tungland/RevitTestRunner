@@ -41,7 +41,7 @@ public class PipeCommandHandler(PipeCommand command, NamedPipeServerStream serve
             try
             {
                 logger.LogDebug($"Connecting to cancellation pipe: {_command.CancelPipe}");
-                cancelClient.Connect(100);
+                cancelClient.Connect(1000);
                 _ = Task.Run(() =>
                 {
                     try

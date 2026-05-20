@@ -350,6 +350,10 @@ public static class RevitTestModelHelper
             // Replace {RevitVersion} placeholder with actual version number
             var resolvedPath = configuration.LocalPath!.Replace("{RevitVersion}", primaryVersionNumber);
 
+            // Replace {RevitInstallPath} with the registry-resolved installation directory
+            var revitInstallPath = GetRevitInstallPath(primaryVersionNumber);
+            resolvedPath = resolvedPath.Replace("{RevitInstallPath}", revitInstallPath.TrimEnd(Path.DirectorySeparatorChar));
+
             // Expand environment variables and special folders, using testAssemblyDirectory for relative paths
             resolvedPath = ResolveSpecialFolders(resolvedPath, testAssemblyDirectory);
             
@@ -357,6 +361,26 @@ public static class RevitTestModelHelper
             if (resolvedPath != configuration.LocalPath)
             {
                 Logger.LogDebug($"Resolved path: {resolvedPath}");
+            }
+
+            // If the path doesn't exist and uses the conventional Revit install directory,
+            // try the registry-resolved path as a fallback (handles non-default installs like Preview Releases)
+            if (!File.Exists(resolvedPath))
+            {
+                var conventionalInstallDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                    "Autodesk", $"Revit {primaryVersionNumber}");
+
+                if (resolvedPath.StartsWith(conventionalInstallDir, StringComparison.OrdinalIgnoreCase))
+                {
+                    var remainder = resolvedPath.Substring(conventionalInstallDir.Length);
+                    var registryBasedPath = revitInstallPath.TrimEnd(Path.DirectorySeparatorChar) + remainder;
+                    if (File.Exists(registryBasedPath))
+                    {
+                        Logger.LogInformation($"Path resolved via registry fallback: {registryBasedPath}");
+                        resolvedPath = registryBasedPath;
+                    }
+                }
             }
 
             if (!File.Exists(resolvedPath))
@@ -443,10 +467,52 @@ public static class RevitTestModelHelper
     }
 
     /// <summary>
+    /// Looks up the Revit installation directory from the Windows registry.
+    /// Falls back to the conventional path if the registry key is not found.
+    /// </summary>
+    private static string GetRevitInstallPath(string revitVersion)
+    {
+        string[] registryRoots =
+        [
+            $@"SOFTWARE\Autodesk\Revit\{revitVersion}",
+            $@"SOFTWARE\WOW6432Node\Autodesk\Revit\{revitVersion}"
+        ];
+
+        foreach (var registryPath in registryRoots)
+        {
+            try
+            {
+                using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(registryPath);
+                if (key == null) continue;
+
+                foreach (var subKeyName in key.GetSubKeyNames())
+                {
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(subKeyName, @"^REVIT-\w+:\w+$"))
+                        continue;
+
+                    using var subKey = key.OpenSubKey(subKeyName);
+                    var installLocation = subKey?.GetValue("InstallationLocation") as string;
+                    if (!string.IsNullOrEmpty(installLocation))
+                        return installLocation;
+                }
+            }
+            catch (Exception)
+            {
+                // Registry access failure — try next root
+            }
+        }
+
+        // Fall back to conventional path
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            "Autodesk", $"Revit {revitVersion}") + Path.DirectorySeparatorChar;
+    }
+
+    /// <summary>
     /// Resolves special folders, environment variables, and relative paths in a file path string
     /// Supports tokens like {Documents}, {Desktop}, {AppData}, {LocalAppData}, {UserProfile},
-    /// environment variables like %USERPROFILE%, %APPDATA%, etc., and relative paths (./, ../)
-    /// relative to the provided base directory (usually the test assembly directory).
+    /// {RevitInstallPath}, environment variables like %USERPROFILE%, %APPDATA%, etc.,
+    /// and relative paths (./, ../) relative to the provided base directory (usually the test assembly directory).
     /// </summary>
     private static string ResolveSpecialFolders(string path, string? baseDirectory = null)
     {

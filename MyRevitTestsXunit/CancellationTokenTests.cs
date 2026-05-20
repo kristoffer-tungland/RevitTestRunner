@@ -32,16 +32,25 @@ public class CancellationTokenTests
     }
 
     /// <summary>
-    /// This test should timeout after 1 second and demonstrate that timeout functionality works.
+    /// This test verifies that the timeout configuration cancels cooperative work after about 1 second.
     /// </summary>
     [RevitFact(Timeout = 1000)] // 1 second timeout
-    public void TimeoutTest_ShouldTimeoutAfterOneSecond()
+    public void TimeoutTest_ShouldCancelAfterOneSecond(CancellationToken cancellationToken)
     {
-        // This should cause a timeout since we're sleeping for 2 seconds but timeout is 1 second
-        Thread.Sleep(2000);
-        
-        // This assertion should never be reached due to timeout
-        Assert.Fail("This test should have timed out before reaching this assertion");
+        var startTime = DateTime.UtcNow;
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            Thread.Sleep(50);
+
+            if ((DateTime.UtcNow - startTime).TotalSeconds > 3)
+            {
+                Assert.Fail("Cancellation token was not cancelled within the expected timeout window.");
+            }
+        }
+
+        var elapsed = DateTime.UtcNow - startTime;
+        Assert.True(elapsed.TotalMilliseconds < 2000, $"Timeout cancellation took too long. Elapsed: {elapsed.TotalMilliseconds}ms");
     }
 
     /// <summary>

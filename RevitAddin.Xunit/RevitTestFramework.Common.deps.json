@@ -1,0 +1,39 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "RevitTestFramework.Common/2027.1.1-pullrequest0020.10": {
+        "dependencies": {
+          "RevitTestFramework.Contracts": "2027.1.1-pullrequest0020.10"
+        },
+        "runtime": {
+          "RevitTestFramework.Common.dll": {}
+        }
+      },
+      "RevitTestFramework.Contracts/2027.1.1-pullrequest0020.10": {
+        "runtime": {
+          "RevitTestFramework.Contracts.dll": {
+            "assemblyVersion": "2027.1.1.1",
+            "fileVersion": "2027.1.1.1"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "RevitTestFramework.Common/2027.1.1-pullrequest0020.10": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "RevitTestFramework.Contracts/2027.1.1-pullrequest0020.10": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}
