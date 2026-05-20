@@ -693,7 +693,7 @@ public static class PipeClientHelper
     /// <summary>
     /// Finds the RevitAddin.Xunit assembly for use with generate-manifest --assembly
     /// </summary>
-    private static string? FindRevitAddinXunitAssembly(string? commonToolPath, ILogger? logger)
+    private static string? FindRevitAddinXunitAssembly(string revitVersion, string? commonToolPath, ILogger? logger)
     {
         var assembly = System.Reflection.Assembly.GetExecutingAssembly();
         string assemblyDirectory = Path.GetDirectoryName(assembly.Location) ?? "";
@@ -726,14 +726,17 @@ public static class PipeClientHelper
         var rawInformationalVersion = PipeNaming.GetAssemblyInformationalVersion(assembly)
             .ToLowerInvariant()
             .Split('+')[0];
-        var nugetContentPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".nuget", "packages", "revitxunit.testadapter", rawInformationalVersion, "content", "RevitAddin");
-        searchLocations.Add(nugetContentPath);
+        if (rawInformationalVersion.StartsWith(revitVersion + ".", StringComparison.OrdinalIgnoreCase))
+        {
+            var nugetContentPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".nuget", "packages", "revitxunit.testadapter", rawInformationalVersion, "content", "RevitAddin");
+            searchLocations.Add(nugetContentPath);
+        }
 
         // Also try scanning all versions of the package in NuGet cache
-        // Prefer versions matching the current Revit year (first 4 digits of informational version)
-        var revitYearPrefix = rawInformationalVersion.Length >= 4 ? rawInformationalVersion.Substring(0, 4) : "";
+        // Prefer versions matching the requested Revit year.
+        var revitYearPrefix = revitVersion + ".";
         var nugetPackagePath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".nuget", "packages", "revitxunit.testadapter");
@@ -814,7 +817,7 @@ public static class PipeClientHelper
         // to get a Revit-year-prefixed version (e.g. 2027.1.1.2012), which ensures that
         // versions are globally unique across Revit years and supports PR builds.
         var commonTool = FindRevitTestFrameworkCommonTool(logger);
-        var addinDllPath = FindRevitAddinXunitAssembly(commonTool, logger);
+        var addinDllPath = FindRevitAddinXunitAssembly(revitVersion, commonTool, logger);
         var normalizedAddinVersion = GetNormalizedVersionFromAddinPath(addinDllPath, logger);
         logger?.LogInformation($"PipeClientHelper: Using addin version: {normalizedAddinVersion}");
 
