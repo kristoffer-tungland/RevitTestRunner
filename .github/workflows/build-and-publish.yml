@@ -1,6 +1,8 @@
 name: Build and Publish
 
 on:
+  pull_request:
+    branches: [ main ]
   push:
     branches: [ main ]
   release:
@@ -130,7 +132,7 @@ jobs:
   publish-github:
     needs: build
     runs-on: windows-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork) || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     permissions:
       contents: read
       packages: write
@@ -177,7 +179,7 @@ jobs:
   publish-nuget:
     needs: build
     runs-on: windows-latest
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' && !github.event.release.prerelease
     
     strategy:
       matrix:
